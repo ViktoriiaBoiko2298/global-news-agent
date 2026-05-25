@@ -140,8 +140,28 @@
             </div>
 
             <div class="field">
+              <label for="sortModeSelect">Сортировка</label>
+              <select id="sortModeSelect" name="sortMode"></select>
+            </div>
+
+            <div class="field">
+              <label for="matchModeSelect">Совпадение</label>
+              <select id="matchModeSelect" name="matchMode"></select>
+            </div>
+
+            <div class="field">
               <label for="excludeInputCustom">Минус-слова</label>
               <input id="excludeInputCustom" name="excludeCustom" autocomplete="off" placeholder="hockey, weather" />
+            </div>
+
+            <div class="field">
+              <label for="sourceIncludeInput">Только источники</label>
+              <input id="sourceIncludeInput" name="sourceInclude" autocomplete="off" placeholder="reuters, bbc, cnbc" />
+            </div>
+
+            <div class="field">
+              <label for="sourceExcludeInput">Минус-источники</label>
+              <input id="sourceExcludeInput" name="sourceExclude" autocomplete="off" placeholder="fox, blog, tabloid" />
             </div>
 
             <div class="actions">
@@ -190,6 +210,14 @@
             <div>
               <span class="metric-label">Источник</span>
               <strong id="sourceName">-</strong>
+            </div>
+            <div>
+              <span class="metric-label">Сортировка</span>
+              <strong id="sortName">-</strong>
+            </div>
+            <div>
+              <span class="metric-label">Совпадение</span>
+              <strong id="matchName">-</strong>
             </div>
           </section>
 

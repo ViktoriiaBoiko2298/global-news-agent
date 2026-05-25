@@ -3,6 +3,8 @@ const state = {
   presets: {},
   focuses: {},
   languages: {},
+  sortModes: {},
+  matchModes: {},
   sourceTypes: {},
   sources: {},
   worldCategories: {},
@@ -36,7 +38,11 @@ const elements = {
   languageSelect: document.querySelector("#languageSelect"),
   focusSelect: document.querySelector("#focusSelect"),
   sourceTypeSelect: document.querySelector("#sourceTypeSelect"),
+  sortModeSelect: document.querySelector("#sortModeSelect"),
+  matchModeSelect: document.querySelector("#matchModeSelect"),
   excludeInput: document.querySelector("#excludeInputCustom"),
+  sourceIncludeInput: document.querySelector("#sourceIncludeInput"),
+  sourceExcludeInput: document.querySelector("#sourceExcludeInput"),
   saveWatchButton: document.querySelector("#saveWatchButton"),
   shareSearchButton: document.querySelector("#shareSearchButton"),
   createAlertButton: document.querySelector("#createAlertButton"),
@@ -54,6 +60,8 @@ const elements = {
   message: document.querySelector("#message"),
   totalCount: document.querySelector("#totalCount"),
   sourceName: document.querySelector("#sourceName"),
+  sortName: document.querySelector("#sortName"),
+  matchName: document.querySelector("#matchName"),
   tagCloud: document.querySelector("#tagCloud"),
   userTagInput: document.querySelector("#userTagInput"),
   userTagCloud: document.querySelector("#userTagCloud"),
@@ -124,6 +132,8 @@ async function loadPresets() {
   state.presets = data.commodities || {};
   state.focuses = data.focuses || {};
   state.languages = data.languages || {};
+  state.sortModes = data.sortModes || {};
+  state.matchModes = data.matchModes || {};
   state.sourceTypes = data.sourceTypes || {};
   state.sources = data.sources || {};
   state.worldCategories = data.worldCategories || {};
@@ -134,6 +144,8 @@ async function loadPresets() {
   fillSelect(elements.focusSelect, state.focuses);
   fillSelect(elements.languageSelect, state.languages);
   fillSelect(elements.sourceTypeSelect, state.sourceTypes);
+  fillSelect(elements.sortModeSelect, state.sortModes);
+  fillSelect(elements.matchModeSelect, state.matchModes);
 }
 
 function fillSelect(element, values) {
@@ -160,7 +172,11 @@ function hydrateFromUrl() {
   elements.languageSelect.value = params.get("language") || "any";
   elements.focusSelect.value = params.get("focus") || "all";
   elements.sourceTypeSelect.value = params.get("sourceType") || "any";
+  elements.sortModeSelect.value = params.get("sortMode") || "relevance";
+  elements.matchModeSelect.value = params.get("matchMode") || "balanced";
   elements.excludeInput.value = params.get("exclude") || "";
+  elements.sourceIncludeInput.value = params.get("sourceInclude") || "";
+  elements.sourceExcludeInput.value = params.get("sourceExclude") || "";
   state.activeTagFilter = params.get("tag") || "";
 }
 
@@ -223,7 +239,11 @@ function buildRequest(overrides = {}) {
     language: elements.languageSelect.value,
     focus: elements.focusSelect.value,
     sourceType: elements.sourceTypeSelect.value,
-    exclude: elements.excludeInput.value.trim()
+    sortMode: elements.sortModeSelect.value,
+    matchMode: elements.matchModeSelect.value,
+    exclude: elements.excludeInput.value.trim(),
+    sourceInclude: elements.sourceIncludeInput.value.trim(),
+    sourceExclude: elements.sourceExcludeInput.value.trim()
   };
 
   if (state.mode === "ticker") base.ticker = elements.tickerInput.value.trim();
@@ -259,6 +279,8 @@ function renderResults(data) {
   elements.message.hidden = true;
   elements.totalCount.textContent = String(totalArticles || clusters.length);
   elements.sourceName.textContent = sourceLabel(request.source);
+  elements.sortName.textContent = state.sortModes[request.filters?.sortMode || "relevance"] || "По релевантности";
+  elements.matchName.textContent = state.matchModes[request.filters?.matchMode || "balanced"] || "Баланс";
   elements.activeLabel.textContent = request.label || elements.activeLabel.textContent;
   elements.lastUpdated.textContent = formatDateTime(data.generatedAt);
   elements.summaryMode.textContent = data.summary?.mode === "ai" ? "AI" : "Heuristic";
@@ -560,7 +582,11 @@ function applyRequestToForm(request) {
   elements.languageSelect.value = request.filters?.language || request.language || "any";
   elements.focusSelect.value = request.filters?.focus || request.focus || "all";
   elements.sourceTypeSelect.value = request.filters?.sourceType || request.sourceType || "any";
+  elements.sortModeSelect.value = request.filters?.sortMode || request.sortMode || "relevance";
+  elements.matchModeSelect.value = request.filters?.matchMode || request.matchMode || "balanced";
   elements.excludeInput.value = (request.filters?.excludeTerms || []).join(", ") || request.exclude || "";
+  elements.sourceIncludeInput.value = (request.filters?.sourceInclude || []).join(", ") || request.sourceInclude || "";
+  elements.sourceExcludeInput.value = (request.filters?.sourceExclude || []).join(", ") || request.sourceExclude || "";
 }
 
 function watchLabel(request) {

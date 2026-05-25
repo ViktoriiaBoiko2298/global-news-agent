@@ -161,6 +161,18 @@ const sourceTypePresets = {
   specialist: "Нишевые источники"
 };
 
+const sortModePresets = {
+  relevance: "По релевантности",
+  newest: "Сначала новые",
+  quality: "Сначала сильные источники"
+};
+
+const matchModePresets = {
+  balanced: "Баланс",
+  strict: "Строго",
+  broad: "Шире"
+};
+
 const countryLexicon = {
   canada: ["canada", "canadian", "канада", "канада", "ottawa", "ontario", "toronto", "quebec"],
   usa: ["united states", "u.s.", "u.s", "usa", "america", "american", "сша", "америка", "америки", "американский", "американские", "washington"],
@@ -232,6 +244,8 @@ app.get("/api/presets", (_req, res) => {
     commodities: commodityPresets,
     focuses: focusPresets,
     languages: languagePresets,
+    sortModes: sortModePresets,
+    matchModes: matchModePresets,
     sourceTypes: sourceTypePresets,
     sources: sourcePresets,
     worldCategories: worldCategoryPresets
@@ -820,10 +834,12 @@ function getRssFeedsForRequest(request, sourceMode) {
 function articleMatchesRequest(article, request) {
   const tags = new Set(article.tags || []);
   const filters = request.filters || {};
+  const score = scoreArticleForRequest(article, request);
 
   if (filters.language !== "any" && !languageMatches(article, filters.language)) return false;
   if (filters.sourceType !== "any" && inferSourceQuality(article).tier !== filters.sourceType) return false;
   if (filters.country && !articleMatchesCountry(article, filters.country)) return false;
+  if (!sourceAllowed(article, filters)) return false;
 
   if (request.mode === "world") {
     if (request.category === "politics" && !(tags.has("политика") || tags.has("геополитика"))) return false;
@@ -834,10 +850,9 @@ function articleMatchesRequest(article, request) {
 
   if (filters.focus !== "all" && !articleMatchesFocus(article, filters.focus)) return false;
 
-  const score = scoreArticleForRequest(article, request);
-  if (request.mode === "custom") return score >= 4;
-  if (request.mode === "ticker") return score >= 3;
-  if (request.mode === "commodity") return score >= 2;
+  if (request.mode === "custom") return score >= minScoreForRequest(request, "custom");
+  if (request.mode === "ticker") return score >= minScoreForRequest(request, "ticker");
+  if (request.mode === "commodity") return score >= minScoreForRequest(request, "commodity");
   return true;
 }
 
@@ -902,12 +917,13 @@ function sortArticlesForRequest(articles, request) {
     relevanceScore: scoreArticleForRequest(article, request)
   }));
   const deduped = dedupeArticles(enriched);
+  const comparator = compareArticlesForRequest(request);
 
-  if (request.mode === "world") {
-    return rankWorldArticles(deduped, request).sort(compareArticlesByRelevance);
+  if (request.mode === "world" && request.filters?.sortMode === "relevance") {
+    return rankWorldArticles(deduped, request).sort(comparator);
   }
 
-  return deduped.sort(compareArticlesByRelevance);
+  return deduped.sort(comparator);
 }
 
 function compareArticlesByRelevance(a, b) {
@@ -918,6 +934,26 @@ function compareArticlesByRelevance(a, b) {
     return (b.sourceQuality?.quality || 0) - (a.sourceQuality?.quality || 0);
   }
   return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+}
+
+function compareArticlesByNewest(a, b) {
+  const timeDiff = new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+  if (timeDiff !== 0) return timeDiff;
+  return compareArticlesByRelevance(a, b);
+}
+
+function compareArticlesByQuality(a, b) {
+  if ((b.sourceQuality?.quality || 0) !== (a.sourceQuality?.quality || 0)) {
+    return (b.sourceQuality?.quality || 0) - (a.sourceQuality?.quality || 0);
+  }
+  return compareArticlesByRelevance(a, b);
+}
+
+function compareArticlesForRequest(request) {
+  const sortMode = request.filters?.sortMode || "relevance";
+  if (sortMode === "newest") return compareArticlesByNewest;
+  if (sortMode === "quality") return compareArticlesByQuality;
+  return compareArticlesByRelevance;
 }
 
 function finalizeArticlesForRequest(articles, request) {
@@ -982,6 +1018,19 @@ function articleMatchesFocus(article, focus) {
   if (focus === "commodities") return tags.has("сырье");
   if (focus === "tech") return tags.has("технологии");
   if (focus === "science") return tags.has("наука") || tags.has("здоровье");
+  return true;
+}
+
+function sourceAllowed(article, filters) {
+  const haystacks = [
+    String(article.domain || "").toLowerCase(),
+    String(article.provider || "").toLowerCase()
+  ];
+  const includes = filters.sourceInclude || [];
+  const excludes = filters.sourceExclude || [];
+
+  if (includes.length && !includes.some((term) => haystacks.some((value) => value.includes(term)))) return false;
+  if (excludes.some((term) => haystacks.some((value) => value.includes(term)))) return false;
   return true;
 }
 
@@ -1667,13 +1716,23 @@ function normalizeFilters(queryParams) {
   const rawExclude =
     queryParams.exclude ??
     (Array.isArray(nested.excludeTerms) ? nested.excludeTerms.join(",") : nested.excludeTerms || "");
+  const rawSourceInclude =
+    queryParams.sourceInclude ??
+    (Array.isArray(nested.sourceInclude) ? nested.sourceInclude.join(",") : nested.sourceInclude || "");
+  const rawSourceExclude =
+    queryParams.sourceExclude ??
+    (Array.isArray(nested.sourceExclude) ? nested.sourceExclude.join(",") : nested.sourceExclude || "");
 
   return {
     country: normalizeCountry(queryParams.country ?? nested.country),
     excludeTerms: parseExcludeTerms(rawExclude),
     focus: normalizeFocus(queryParams.focus ?? nested.focus),
     language: normalizeLanguage(queryParams.language ?? nested.language),
-    sourceType: normalizeSourceType(queryParams.sourceType ?? nested.sourceType)
+    sourceType: normalizeSourceType(queryParams.sourceType ?? nested.sourceType),
+    sortMode: normalizeSortMode(queryParams.sortMode ?? nested.sortMode),
+    matchMode: normalizeMatchMode(queryParams.matchMode ?? nested.matchMode),
+    sourceInclude: parseSourceTerms(rawSourceInclude),
+    sourceExclude: parseSourceTerms(rawSourceExclude)
   };
 }
 
@@ -1692,6 +1751,10 @@ function requestToQueryParams(request, extra = {}) {
     focus: request?.filters?.focus,
     language: request?.filters?.language,
     sourceType: request?.filters?.sourceType,
+    sortMode: request?.filters?.sortMode,
+    matchMode: request?.filters?.matchMode,
+    sourceInclude: Array.isArray(request?.filters?.sourceInclude) ? request.filters.sourceInclude.join(",") : request?.filters?.sourceInclude,
+    sourceExclude: Array.isArray(request?.filters?.sourceExclude) ? request.filters.sourceExclude.join(",") : request?.filters?.sourceExclude,
     exclude: Array.isArray(request?.filters?.excludeTerms) ? request.filters.excludeTerms.join(",") : request?.filters?.excludeTerms
   };
 }
@@ -1784,6 +1847,16 @@ function normalizeSourceType(value) {
   return Object.prototype.hasOwnProperty.call(sourceTypePresets, key) ? key : "any";
 }
 
+function normalizeSortMode(value) {
+  const key = String(value || "relevance").toLowerCase();
+  return Object.prototype.hasOwnProperty.call(sortModePresets, key) ? key : "relevance";
+}
+
+function normalizeMatchMode(value) {
+  const key = String(value || "balanced").toLowerCase();
+  return Object.prototype.hasOwnProperty.call(matchModePresets, key) ? key : "balanced";
+}
+
 function normalizeCountry(value) {
   if (!value) return "";
   const key = String(value).trim().toLowerCase();
@@ -1793,6 +1866,20 @@ function normalizeCountry(value) {
 
 function parseExcludeTerms(value) {
   return compactTerms(String(value || "").split(","));
+}
+
+function parseSourceTerms(value) {
+  return compactTerms(String(value || "").split(",").map((term) => term.replace(/^www\./i, "")));
+}
+
+function minScoreForRequest(request, mode) {
+  const matchMode = request.filters?.matchMode || "balanced";
+  const thresholds = {
+    custom: { strict: 8, balanced: 4, broad: 2 },
+    ticker: { strict: 6, balanced: 3, broad: 2 },
+    commodity: { strict: 4, balanced: 2, broad: 1 }
+  };
+  return thresholds[mode]?.[matchMode] ?? thresholds[mode]?.balanced ?? 2;
 }
 
 function sanitizeTicker(value) {
