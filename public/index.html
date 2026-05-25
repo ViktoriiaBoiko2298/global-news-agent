@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#cb6043" />
+    <title>News Agent</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-noise" aria-hidden="true"></div>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">Signal desk</p>
+          <div class="headline-row">
+            <h1>News Agent</h1>
+            <p class="hero-note">World, markets, companies, commodities.</p>
+          </div>
+        </div>
+        <div class="status-stack">
+          <div class="status-pill" id="connectionStatus">
+            <span class="dot"></span>
+            <span>готов</span>
+          </div>
+          <div class="signal-ribbon" aria-hidden="true">
+            <span>Politics</span>
+            <span>Macro</span>
+            <span>Equities</span>
+            <span>Metals</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="control-panel" aria-label="Панель поиска">
+          <div class="panel-topline">
+            <p class="eyebrow">Command deck</p>
+            <span class="panel-code">Live filters</span>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Режим поиска">
+            <button class="tab active" type="button" data-mode="world">
+              <i data-lucide="globe-2"></i>
+              24 часа
+            </button>
+            <button class="tab" type="button" data-mode="ticker">
+              <i data-lucide="badge-dollar-sign"></i>
+              Тикер
+            </button>
+            <button class="tab" type="button" data-mode="commodity">
+              <i data-lucide="pickaxe"></i>
+              Сырье
+            </button>
+            <button class="tab" type="button" data-mode="custom">
+              <i data-lucide="search"></i>
+              Запрос
+            </button>
+          </div>
+
+          <form class="search-form" id="searchForm">
+            <div class="field mode-field" data-field="world">
+              <label for="worldCategorySelect">Темы</label>
+              <select id="worldCategorySelect" name="category"></select>
+            </div>
+
+            <div class="field mode-field" data-field="ticker" hidden>
+              <label for="tickerInput">Тикер</label>
+              <input id="tickerInput" name="ticker" autocomplete="off" placeholder="NVDA" />
+            </div>
+
+            <div class="field mode-field" data-field="commodity" hidden>
+              <label for="commoditySelect">Товар</label>
+              <select id="commoditySelect" name="commodity"></select>
+            </div>
+
+            <div class="field mode-field" data-field="custom" hidden>
+              <label for="queryInput">Запрос</label>
+              <input id="queryInput" name="query" autocomplete="off" placeholder="central bank gold buying" />
+            </div>
+
+            <div class="field">
+              <label for="timespanSelect">Период</label>
+              <select id="timespanSelect" name="timespan">
+                <option value="1h">1 час</option>
+                <option value="6h">6 часов</option>
+                <option value="12h">12 часов</option>
+                <option value="24h" selected>24 часа</option>
+                <option value="48h">48 часов</option>
+                <option value="72h">72 часа</option>
+                <option value="7d">7 дней</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="sourceSelect">Источник</label>
+              <select id="sourceSelect" name="source">
+                <option value="auto" selected>Авто</option>
+                <option value="gdelt">GDELT</option>
+                <option value="google">Google News</option>
+              </select>
+            </div>
+
+            <div class="field small">
+              <label for="limitSelect">Лимит</label>
+              <select id="limitSelect" name="limit">
+                <option value="15">15</option>
+                <option value="30" selected>30</option>
+                <option value="45">45</option>
+                <option value="60">60</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="countryInput">Страна</label>
+              <input id="countryInput" name="country" autocomplete="off" placeholder="Canada" />
+            </div>
+
+            <div class="field">
+              <label for="languageSelect">Язык</label>
+              <select id="languageSelect" name="language"></select>
+            </div>
+
+            <div class="field">
+              <label for="focusSelect">Фокус</label>
+              <select id="focusSelect" name="focus"></select>
+            </div>
+
+            <div class="field">
+              <label for="sourceTypeSelect">Тип источника</label>
+              <select id="sourceTypeSelect" name="sourceType"></select>
+            </div>
+
+            <div class="field">
+              <label for="excludeInputCustom">Минус-слова</label>
+              <input id="excludeInputCustom" name="excludeCustom" autocomplete="off" placeholder="hockey, weather" />
+            </div>
+
+            <div class="actions">
+              <button class="primary" type="submit">
+                <i data-lucide="radar"></i>
+                Найти
+              </button>
+              <button class="ghost" id="saveWatchButton" type="button">
+                <i data-lucide="bookmark-plus"></i>
+                Закрепить
+              </button>
+            </div>
+          </form>
+
+          <div class="quick-actions">
+            <button class="ghost small-action" id="shareSearchButton" type="button">
+              <i data-lucide="share-2"></i>
+              Поделиться
+            </button>
+            <button class="ghost small-action" id="createAlertButton" type="button">
+              <i data-lucide="bell-plus"></i>
+              Алерт
+            </button>
+          </div>
+
+          <div class="automation-row">
+            <label class="switch">
+              <input id="autoRefreshToggle" type="checkbox" checked />
+              <span></span>
+              Автообновление
+            </label>
+            <select id="refreshInterval">
+              <option value="300000">5 минут</option>
+              <option value="900000" selected>15 минут</option>
+              <option value="1800000">30 минут</option>
+            </select>
+          </div>
+        </section>
+
+        <aside class="side-panel" aria-label="Сводка">
+          <section class="metric-band">
+            <div>
+              <span class="metric-label">Найдено</span>
+              <strong id="totalCount">0</strong>
+            </div>
+            <div>
+              <span class="metric-label">Источник</span>
+              <strong id="sourceName">-</strong>
+            </div>
+          </section>
+
+          <section class="watch-panel">
+            <div class="panel-heading">
+              <h2>Закрепленные</h2>
+              <button class="icon-button" id="refreshWatchlist" type="button" aria-label="Обновить список">
+                <i data-lucide="refresh-cw"></i>
+              </button>
+            </div>
+            <div class="watchlist" id="watchlist"></div>
+          </section>
+
+          <section class="watch-panel">
+            <div class="panel-heading">
+              <h2>Алерты</h2>
+              <div class="panel-actions">
+                <button class="icon-button" id="enableNotificationsButton" type="button" aria-label="Включить уведомления">
+                  <i data-lucide="bell"></i>
+                </button>
+                <button class="icon-button" id="refreshAlerts" type="button" aria-label="Проверить алерты">
+                  <i data-lucide="bell-ring"></i>
+                </button>
+              </div>
+            </div>
+            <div class="mini-status" id="notificationStatus">Уведомления выключены</div>
+            <div class="watchlist" id="alertsList"></div>
+          </section>
+
+          <section class="watch-panel">
+            <div class="panel-heading">
+              <h2>История</h2>
+              <button class="icon-button" id="refreshHistory" type="button" aria-label="Обновить историю">
+                <i data-lucide="history"></i>
+              </button>
+            </div>
+            <div class="watchlist" id="historyList"></div>
+          </section>
+
+          <section class="stats-panel">
+            <div class="panel-heading compact-heading">
+              <h2>Мои теги</h2>
+              <button class="icon-button" id="saveUserTagButton" type="button" aria-label="Добавить пользовательский тег">
+                <i data-lucide="plus"></i>
+              </button>
+            </div>
+            <div class="tag-input-row">
+              <input id="userTagInput" type="text" autocomplete="off" placeholder="canada macro" />
+            </div>
+            <div class="tag-cloud" id="userTagCloud"></div>
+          </section>
+
+          <section class="stats-panel">
+            <div class="panel-heading compact-heading">
+              <h2>Темы ленты</h2>
+              <button class="icon-button" id="clearTagFilterButton" type="button" aria-label="Сбросить фильтр тем">
+                <i data-lucide="filter-x"></i>
+              </button>
+            </div>
+            <div class="tag-cloud" id="tagCloud"></div>
+          </section>
+        </aside>
+
+        <section class="results-panel" aria-label="Новости">
+          <div class="results-head">
+            <div class="results-title-block">
+              <p class="eyebrow" id="activeMode">Мировые новости</p>
+              <h2 id="activeLabel">Последние 24 часа</h2>
+            </div>
+            <div class="results-timestamp">
+              <span class="timestamp-label">Updated</span>
+              <span id="lastUpdated">-</span>
+            </div>
+          </div>
+          <section class="briefing-panel" id="briefingPanel">
+            <div class="panel-heading">
+              <h2>Briefing</h2>
+              <span class="panel-code" id="summaryMode">Heuristic</span>
+            </div>
+            <div class="briefing-lines" id="briefingLines"></div>
+          </section>
+          <div class="message" id="message" hidden></div>
+          <div class="results-list" id="resultsList"></div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

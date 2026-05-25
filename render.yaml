@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: global-news-agent
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: NEWS_AGENT_DATA_DIR
+        value: /var/data/news-agent
+      - key: WEB_PUSH_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_PRIVATE_KEY
+        sync: false
+      - key: WEB_PUSH_SUBJECT
+        sync: false
+    disk:
+      name: news-agent-data
+      mountPath: /var/data
+      sizeGB: 1

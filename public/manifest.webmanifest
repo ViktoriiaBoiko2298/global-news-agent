@@ -1,0 +1,9 @@
+{
+  "name": "News Agent",
+  "short_name": "News Agent",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f1ec",
+  "theme_color": "#cb6043",
+  "description": "Alerts, world news, companies, commodities, and custom searches."
+}
