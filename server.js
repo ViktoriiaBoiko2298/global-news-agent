@@ -103,6 +103,20 @@ const worldCategoryPresets = {
       '(economy OR markets OR inflation OR "central bank" OR rates OR trade OR business OR jobs OR GDP)',
     googleQuery: "economy OR markets OR inflation OR central bank OR business"
   },
+  stocks: {
+    label: "Сток маркет",
+    topics: ["BUSINESS", "TECHNOLOGY", "WORLD"],
+    query:
+      '("stock market" OR stocks OR equities OR shares OR nasdaq OR nyse OR s&p 500 OR dow OR earnings OR analysts OR "market rally" OR "market selloff")',
+    googleQuery: "\"stock market\" OR stocks OR equities OR earnings OR nasdaq OR nyse"
+  },
+  crypto: {
+    label: "Крипта",
+    topics: ["BUSINESS", "TECHNOLOGY", "WORLD"],
+    query:
+      '(crypto OR cryptocurrency OR bitcoin OR btc OR ethereum OR eth OR solana OR stablecoin OR blockchain OR "digital assets" OR "crypto market")',
+    googleQuery: "crypto OR bitcoin OR ethereum OR stablecoin OR blockchain"
+  },
   technology: {
     label: "Технологии",
     topics: ["TECHNOLOGY", "SCIENCE", "BUSINESS"],
@@ -142,6 +156,8 @@ const focusPresets = {
   all: "Все темы",
   politics: "Политика",
   markets: "Рынки",
+  stocks: "Сток маркет",
+  crypto: "Крипта",
   companies: "Компании",
   commodities: "Сырье",
   tech: "Технологии",
@@ -728,6 +744,8 @@ function getWorldPriority(article, category) {
   if (category === "politics") return tags.has("политика") || tags.has("геополитика") ? 3 : 1;
   if (category === "ordinary") return tags.has("политика") || tags.has("геополитика") ? 0 : 2;
   if (category === "economy") return tags.has("экономика") || tags.has("рынки") || tags.has("макро") ? 3 : 1;
+  if (category === "stocks") return tags.has("акции") || tags.has("рынки") || tags.has("макро") ? 3 : 1;
+  if (category === "crypto") return tags.has("крипта") ? 4 : tags.has("рынки") ? 2 : 1;
   if (category === "technology") return tags.has("технологии") || tags.has("наука") ? 3 : 1;
 
   if (tags.has("политика") || tags.has("геополитика")) return 3;
@@ -845,6 +863,8 @@ function articleMatchesRequest(article, request) {
     if (request.category === "politics" && !(tags.has("политика") || tags.has("геополитика"))) return false;
     if (request.category === "ordinary" && (tags.has("политика") || tags.has("геополитика"))) return false;
     if (request.category === "economy" && !(tags.has("экономика") || tags.has("рынки") || tags.has("макро"))) return false;
+    if (request.category === "stocks" && !(tags.has("акции") || tags.has("рынки") || tags.has("макро"))) return false;
+    if (request.category === "crypto" && !tags.has("крипта")) return false;
     if (request.category === "technology" && !(tags.has("технологии") || tags.has("наука"))) return false;
   }
 
@@ -1014,6 +1034,8 @@ function articleMatchesFocus(article, focus) {
   const tags = new Set(article.tags || []);
   if (focus === "politics") return tags.has("политика") || tags.has("геополитика");
   if (focus === "markets") return tags.has("рынки") || tags.has("макро") || tags.has("экономика");
+  if (focus === "stocks") return tags.has("акции") || tags.has("рынки");
+  if (focus === "crypto") return tags.has("крипта");
   if (focus === "companies") return tags.has("рынки") || tags.has("экономика");
   if (focus === "commodities") return tags.has("сырье");
   if (focus === "tech") return tags.has("технологии");
@@ -1673,6 +1695,8 @@ function inferTags(text = "", topic = "") {
   const checks = [
     ["политика", ["politics", "election", "government", "parliament", "president", "minister", "vote", "campaign"]],
     ["рынки", ["stock", "market", "shares", "bond", "yield", "earnings", "revenue"]],
+    ["акции", ["stock market", "stocks", "equities", "shares", "nasdaq", "nyse", "s&p 500", "dow", "earnings"]],
+    ["крипта", ["crypto", "cryptocurrency", "bitcoin", "btc", "ethereum", "eth", "solana", "stablecoin", "blockchain"]],
     ["сырье", ["gold", "silver", "copper", "oil", "gas", "wheat", "uranium", "lithium", "commodity"]],
     ["геополитика", ["war", "conflict", "sanction", "ceasefire", "military", "border"]],
     ["макро", ["inflation", "central bank", "fed", "ecb", "rate", "gdp", "economy"]],
