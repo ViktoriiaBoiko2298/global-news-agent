@@ -89,19 +89,19 @@ button {
   width: min(1560px, 100%);
   height: 100vh;
   margin: 0 auto;
-  padding: 24px 22px 28px;
+  padding: 18px 20px 24px;
 }
 
 .topbar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 28px;
+  gap: 20px;
   position: sticky;
   top: 10px;
   z-index: 30;
-  margin-bottom: 18px;
-  padding: 14px 18px 18px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 8px;
   background:
@@ -113,23 +113,23 @@ button {
 
 .brand-block {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .headline-row {
   display: flex;
-  align-items: flex-end;
-  gap: 18px;
+  align-items: center;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .hero-note {
   max-width: 720px;
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .eyebrow {
@@ -149,7 +149,7 @@ h2 {
 
 h1 {
   font-family: "Sora", "Manrope", sans-serif;
-  font-size: 60px;
+  font-size: 48px;
   font-weight: 700;
   line-height: 0.98;
 }
@@ -163,7 +163,7 @@ h2 {
 
 .status-stack {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   justify-items: end;
 }
 
@@ -214,8 +214,8 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 14px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.84);
@@ -254,8 +254,8 @@ h2 {
 .signal-ribbon span {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 13px;
+  min-height: 28px;
+  padding: 0 11px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.7);
@@ -1221,7 +1221,7 @@ select:focus {
   }
 
   h1 {
-    font-size: 54px;
+    font-size: 44px;
   }
 
   h2 {
@@ -1278,7 +1278,7 @@ select:focus {
     display: block;
     height: auto;
     min-height: 100vh;
-    padding: 18px 14px 24px;
+    padding: 16px 14px 24px;
   }
 
   .topbar {
@@ -1332,7 +1332,7 @@ select:focus {
   }
 
   h1 {
-    font-size: 48px;
+    font-size: 40px;
   }
 
   h2 {
@@ -1372,7 +1372,7 @@ select:focus {
   }
 
   h1 {
-    font-size: 42px;
+    font-size: 34px;
   }
 
   h2 {

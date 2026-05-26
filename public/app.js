@@ -146,6 +146,7 @@ const I18N = {
         sourceExcludeInput: "Exclude sources"
       },
       placeholders: {
+        worldCategorySelect: "Choose a topic",
         tickerInput: "NVDA",
         queryInput: "central bank gold buying",
         countryInput: "Canada",
@@ -201,11 +202,13 @@ const I18N = {
           commodity: "Market news",
           custom: "Global search"
         },
+        idleLabel: "Choose what to search",
         updated: "Updated",
         briefing: "Briefing",
         heuristic: "Heuristic",
         ai: "AI",
         empty: "No news right now",
+        idle: "Choose a topic or search mode, then press Search.",
         noTags: "no tags",
         summaryPlaceholder: "A short summary will appear after the first search.",
         loading: "Gathering the feed and reranking sources.",
@@ -233,6 +236,7 @@ const I18N = {
         minutesShort: "m"
       },
       prompts: {
+        chooseTopic: "Choose a topic first.",
         alertInterval: "Alert interval in minutes",
         enterQuery: "Enter a search query."
       },
@@ -301,6 +305,7 @@ const I18N = {
         sourceExcludeInput: "Минус-источники"
       },
       placeholders: {
+        worldCategorySelect: "Выбери тему",
         tickerInput: "NVDA",
         queryInput: "покупки золота центробанками",
         countryInput: "Канада",
@@ -356,11 +361,13 @@ const I18N = {
           commodity: "Рыночные новости",
           custom: "Глобальный поиск"
         },
+        idleLabel: "Выбери, что искать",
         updated: "Обновлено",
         briefing: "Брифинг",
         heuristic: "Эвристический",
         ai: "AI",
         empty: "Новости отсутствуют",
+        idle: "Выбери тему или режим поиска, потом нажми Найти.",
         noTags: "без тегов",
         summaryPlaceholder: "Краткая сводка появится после первого поиска.",
         loading: "Собираю ленту и пересортировываю источники.",
@@ -388,6 +395,7 @@ const I18N = {
         minutesShort: "м"
       },
       prompts: {
+        chooseTopic: "Сначала выбери тему.",
         alertInterval: "Интервал алерта в минутах",
         enterQuery: "Введите поисковый запрос."
       },
@@ -456,6 +464,7 @@ const I18N = {
         sourceExcludeInput: "Мінус-джерела"
       },
       placeholders: {
+        worldCategorySelect: "Оберіть тему",
         tickerInput: "NVDA",
         queryInput: "закупівля золота центробанками",
         countryInput: "Канада",
@@ -511,11 +520,13 @@ const I18N = {
           commodity: "Ринкові новини",
           custom: "Глобальний пошук"
         },
+        idleLabel: "Оберіть, що шукати",
         updated: "Оновлено",
         briefing: "Брифінг",
         heuristic: "Евристичний",
         ai: "AI",
         empty: "Новини відсутні",
+        idle: "Оберіть тему або режим пошуку, потім натисніть Знайти.",
         noTags: "без тегів",
         summaryPlaceholder: "Коротке зведення з’явиться після першого пошуку.",
         loading: "Збираю стрічку та перевпорядковую джерела.",
@@ -543,6 +554,7 @@ const I18N = {
         minutesShort: "хв"
       },
       prompts: {
+        chooseTopic: "Спочатку оберіть тему.",
         alertInterval: "Інтервал алерта в хвилинах",
         enterQuery: "Введіть пошуковий запит."
       },
@@ -683,12 +695,17 @@ async function init() {
   bindEvents();
   await loadPresets();
   applyLocale();
-  hydrateFromUrl();
+  const hasPrefilledRequest = hydrateFromUrl();
   setMode(state.mode);
   updateNotificationUi();
   await setupPushSupport();
   await Promise.all([loadWatchlist(), loadAlerts({ seedOnly: true }), loadHistory(), loadUserTags()]);
-  await runSearch({ replaceHistory: true });
+  if (hasPrefilledRequest) {
+    await runSearch({ replaceHistory: true });
+  } else {
+    renderIdleState();
+    setReady("ready");
+  }
   configureAutoRefresh();
   configureAlertMonitor();
   refreshIcons();
@@ -782,7 +799,7 @@ function localizedMap(group) {
 
 function renderPresetOptions() {
   const selectedSource = elements.sourceSelect.value || "auto";
-  const selectedCategory = elements.worldCategorySelect.value || "all";
+  const selectedCategory = elements.worldCategorySelect.value || "";
   const selectedCommodity = elements.commoditySelect.value || "gold";
   const selectedFocus = elements.focusSelect.value || "all";
   const selectedFilterLanguage = elements.languageSelect.value || "any";
@@ -793,7 +810,10 @@ function renderPresetOptions() {
   const selectedRefresh = elements.refreshInterval.value || "900000";
 
   fillSelect(elements.sourceSelect, localizedMap("sources"));
-  fillSelect(elements.worldCategorySelect, localizedMap("worldCategories"));
+  fillSelect(elements.worldCategorySelect, {
+    "": currentUi().placeholders.worldCategorySelect,
+    ...localizedMap("worldCategories")
+  });
   fillSelect(elements.commoditySelect, localizedMap("commodities"));
   fillSelect(elements.focusSelect, localizedMap("focuses"));
   fillSelect(elements.languageSelect, localizedMap("filterLanguages"));
@@ -917,16 +937,19 @@ function applyLocale() {
 
   renderPresetOptions();
   setMode(state.mode);
+  if (!state.currentPayload && !state.lastRequest) renderIdleState();
   updateNotificationUi();
 }
 
 function hydrateFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  const hasRequestParams = ["category", "ticker", "commodity", "query", "country", "focus", "source", "tag"]
+    .some((key) => params.has(key));
   state.mode = params.get("mode") || "world";
   elements.sourceSelect.value = params.get("source") || "auto";
   elements.timespanSelect.value = params.get("timespan") || "24h";
   elements.limitSelect.value = params.get("limit") || "30";
-  elements.worldCategorySelect.value = params.get("category") || "all";
+  elements.worldCategorySelect.value = params.get("category") || "";
   elements.tickerInput.value = params.get("ticker") || "";
   elements.commoditySelect.value = params.get("commodity") || "gold";
   elements.queryInput.value = params.get("query") || "";
@@ -940,6 +963,7 @@ function hydrateFromUrl() {
   elements.sourceIncludeInput.value = params.get("sourceInclude") || "";
   elements.sourceExcludeInput.value = params.get("sourceExclude") || "";
   state.activeTagFilter = params.get("tag") || "";
+  return hasRequestParams;
 }
 
 function setMode(mode) {
@@ -969,6 +993,13 @@ function setMode(mode) {
 }
 
 async function runSearch(options = {}) {
+  if (state.mode === "world" && !elements.worldCategorySelect.value) {
+    renderIdleState(currentUi().prompts.chooseTopic);
+    setError("error");
+    elements.worldCategorySelect.focus();
+    return;
+  }
+
   const request = buildRequest();
   state.lastRequest = request;
   syncUrl();
@@ -996,7 +1027,7 @@ function buildRequest(overrides = {}) {
     source: elements.sourceSelect.value,
     timespan: elements.timespanSelect.value,
     limit: elements.limitSelect.value,
-    category: elements.worldCategorySelect.value || "all",
+    category: elements.worldCategorySelect.value,
     country: elements.countryInput.value.trim(),
     language: elements.languageSelect.value,
     focus: elements.focusSelect.value,
@@ -1039,6 +1070,7 @@ function renderResults(data) {
     : data.stats?.total || countClusterArticles(clusters);
   const ui = currentUi();
 
+  elements.message.textContent = "";
   elements.message.hidden = true;
   if (elements.totalCount) elements.totalCount.textContent = String(totalArticles || clusters.length);
   if (elements.sourceName) elements.sourceName.textContent = sourceLabel(request.source);
@@ -1210,9 +1242,27 @@ function selectCardTags(tags) {
 }
 
 function renderLoading() {
+  elements.message.textContent = "";
   elements.message.hidden = true;
   elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.loading)}</p>`;
   elements.resultsList.innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton"></div>').join("");
+}
+
+function renderIdleState(message = "") {
+  state.currentPayload = null;
+  state.lastRequest = null;
+  elements.message.textContent = "";
+  elements.message.hidden = true;
+  if (message) {
+    elements.message.textContent = message;
+    elements.message.hidden = false;
+  }
+  elements.activeMode.textContent = currentUi().results.activeModes[state.mode] || currentUi().results.activeModes.world;
+  elements.activeLabel.textContent = currentUi().results.idleLabel;
+  elements.lastUpdated.textContent = "-";
+  elements.summaryMode.textContent = "";
+  elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
+  elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(currentUi().results.idle)}</div>`;
 }
 
 function renderError(message) {
@@ -1883,6 +1933,7 @@ function urlBase64ToUint8Array(base64String) {
 
 function selectedWorldCategoryLabel() {
   const value = elements.worldCategorySelect.value || "all";
+  if (!elements.worldCategorySelect.value) return currentUi().results.idleLabel;
   return localizedMap("worldCategories")[value] || state.worldCategories[value]?.label || currentUi().results.defaults.world;
 }
 
