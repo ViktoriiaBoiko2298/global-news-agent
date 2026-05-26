@@ -210,6 +210,7 @@ const I18N = {
         summaryPlaceholder: "A short summary will appear after the first search.",
         loading: "Gathering the feed and reranking sources.",
         score: "score",
+        alsoFrom: "Also from",
         sourceCount: (count) => `${count} sources`
       },
       share: {
@@ -364,6 +365,7 @@ const I18N = {
         summaryPlaceholder: "Краткая сводка появится после первого поиска.",
         loading: "Собираю ленту и пересортировываю источники.",
         score: "оценка",
+        alsoFrom: "Еще из",
         sourceCount: (count) => `${count} источника`
       },
       share: {
@@ -518,6 +520,7 @@ const I18N = {
         summaryPlaceholder: "Коротке зведення з’явиться після першого пошуку.",
         loading: "Збираю стрічку та перевпорядковую джерела.",
         score: "оцінка",
+        alsoFrom: "Ще з",
         sourceCount: (count) => `${count} джерела`
       },
       share: {
@@ -1065,13 +1068,21 @@ function renderResults(data) {
 
 function renderCluster(cluster) {
   const article = cluster.lead;
-  const tags = (article.tags || []).map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`).join("");
-  const summary = excerptText(article.summary || article.title, cluster.size > 1 ? 190 : 170);
+  const tags = selectCardTags(article.tags || [])
+    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
+    .join("");
+  const summary = excerptText(article.summary || article.title, cluster.size > 1 ? 172 : 150);
   const quality = article.sourceQuality || {};
   const related = cluster.related
+    .slice(0, 3)
     .map((item) => `<a class="related-link" href="${escapeAttribute(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.source)}</a>`)
     .join("");
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
+  const sourceChip = escapeHtml(article.provider || article.domain || "Source");
+  const scoreChip = quality.quality ? `<span>${escapeHtml(currentUi().results.score)} ${escapeHtml(String(quality.quality))}</span>` : "";
+  const relatedRow = cluster.related.length
+    ? `<div class="related-strip"><span class="related-label">${escapeHtml(currentUi().results.alsoFrom)}</span><div class="related-links">${related}</div></div>`
+    : "";
 
   return `
     <article class="article-card${article.image ? "" : " no-image"}">
@@ -1100,16 +1111,12 @@ function renderCluster(cluster) {
           ${escapeHtml(article.title)}
         </a>
         <p class="article-summary">${escapeHtml(summary)}</p>
-        <div class="article-tags">
-          ${tags}
-          <span>${escapeHtml(translateTier(quality.tier || "specialist"))}</span>
-        </div>
+        ${tags ? `<div class="article-tags">${tags}</div>` : ""}
         <div class="article-footer">
-          <span>${escapeHtml(article.provider || "Source")}</span>
-          <span>${escapeHtml(translateQualityType(quality.type || "niche"))}</span>
-          <span>${escapeHtml(currentUi().results.score)} ${escapeHtml(String(quality.quality || 0))}</span>
+          <span>${sourceChip}</span>
+          ${scoreChip}
         </div>
-        ${cluster.related.length ? `<div class="related-links">${related}</div>` : ""}
+        ${relatedRow}
       </div>
       ${article.image ? `<img class="article-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}
     </article>
@@ -1118,7 +1125,7 @@ function renderCluster(cluster) {
 
 function renderBriefing(lines) {
   elements.briefingLines.innerHTML = lines.length
-    ? lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")
+    ? lines.slice(0, 2).map((line) => `<p>${escapeHtml(line)}</p>`).join("")
     : `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
 }
 
@@ -1167,34 +1174,39 @@ function buildLocalizedBriefing(data, request, clusters) {
   const ui = currentUi();
   const total = data.stats?.total || countClusterArticles(clusters);
   const topTags = (data.stats?.topTags || []).slice(0, 3).map((entry) => translateTag(entry.label)).join(", ");
-  const topDomains = (data.stats?.topDomains || []).slice(0, 3).map((entry) => entry.label).join(", ");
   const leadCluster = clusters[0];
   const label = localizedRequestLabel(request);
+  const timeLabel = localizedMap("timespans")[request.timespan] || request.timespan;
+  const leadLine = leadCluster
+    ? `${leadCluster.lead.title}${leadCluster.size > 1 ? ` (${currentUi().results.sourceCount(leadCluster.size)})` : ""}.`
+    : "";
 
   if (state.locale === "ru") {
     return [
-      `${total} материалов за ${localizedMap("timespans")[request.timespan] || request.timespan} по запросу "${label}".`,
-      topTags ? `Главные темы ленты: ${topTags}.` : "",
-      leadCluster ? `Самая заметная история: ${leadCluster.lead.title}${leadCluster.size > 1 ? ` (${currentUi().results.sourceCount(leadCluster.size)})` : ""}.` : "",
-      topDomains ? `Чаще всего встречаются источники: ${topDomains}.` : ""
+      `${total} материалов за ${timeLabel} по теме "${label}".`,
+      leadLine ? `В центре внимания: ${leadLine}` : (topTags ? `Главные темы: ${topTags}.` : "")
     ].filter(Boolean);
   }
 
   if (state.locale === "uk") {
     return [
-      `${total} матеріалів за ${localizedMap("timespans")[request.timespan] || request.timespan} за запитом "${label}".`,
-      topTags ? `Головні теми стрічки: ${topTags}.` : "",
-      leadCluster ? `Найпомітніша історія: ${leadCluster.lead.title}${leadCluster.size > 1 ? ` (${currentUi().results.sourceCount(leadCluster.size)})` : ""}.` : "",
-      topDomains ? `Найчастіше зустрічаються джерела: ${topDomains}.` : ""
+      `${total} матеріалів за ${timeLabel} за темою "${label}".`,
+      leadLine ? `У фокусі: ${leadLine}` : (topTags ? `Головні теми: ${topTags}.` : "")
     ].filter(Boolean);
   }
 
   return [
-    `${total} stories in ${localizedMap("timespans")[request.timespan] || request.timespan} for "${label}".`,
-    topTags ? `Main topics in the feed: ${topTags}.` : "",
-    leadCluster ? `Lead story: ${leadCluster.lead.title}${leadCluster.size > 1 ? ` (${currentUi().results.sourceCount(leadCluster.size)})` : ""}.` : "",
-    topDomains ? `Most common sources: ${topDomains}.` : ""
+    `${total} stories in ${timeLabel} for "${label}".`,
+    leadLine ? `Focus: ${leadLine}` : (topTags ? `Main themes: ${topTags}.` : "")
   ].filter(Boolean);
+}
+
+function selectCardTags(tags) {
+  const preferredOrder = ["геополитика", "политика", "рынки", "акции", "крипта", "сырье", "экономика", "технологии", "риски"];
+  const unique = [...new Set(tags)];
+  const ordered = preferredOrder.filter((tag) => unique.includes(tag));
+  const fallback = unique.filter((tag) => !ordered.includes(tag));
+  return [...ordered, ...fallback].slice(0, 2);
 }
 
 function renderLoading() {

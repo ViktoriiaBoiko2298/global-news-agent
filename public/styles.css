@@ -318,7 +318,7 @@ h2 {
 .side-panel {
   grid-area: side;
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-height: 0;
   height: 100%;
   overflow: auto;
@@ -668,8 +668,13 @@ select:focus {
 .watch-panel,
 .stats-panel {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
+  border-color: rgba(15, 23, 42, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.5)),
+    rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
 .panel-heading,
@@ -684,7 +689,7 @@ select:focus {
 .stats-panel h2,
 .briefing-panel h2 {
   font-family: "Manrope", "Segoe UI", sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -706,8 +711,8 @@ select:focus {
 }
 
 .mini-status {
-  color: var(--muted-strong);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -732,14 +737,14 @@ select:focus {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 42px;
-  padding: 7px 10px 7px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  min-height: 40px;
+  padding: 6px 10px 6px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
-  font-size: 13px;
+  background: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
   font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .watch-item button {
@@ -773,13 +778,13 @@ select:focus {
   gap: 8px;
   width: fit-content;
   max-width: 100%;
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -851,26 +856,30 @@ select:focus {
 
 .briefing-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 16px;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border-radius: 8px;
-  border: 1px solid rgba(79, 107, 255, 0.14);
+  border: 1px solid rgba(15, 23, 42, 0.06);
   background:
-    linear-gradient(135deg, rgba(79, 107, 255, 0.06), rgba(255, 122, 89, 0.04)),
-    rgba(255, 255, 255, 0.86);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.58)),
+    rgba(255, 255, 255, 0.76);
+}
+
+.briefing-panel .panel-code {
+  display: none;
 }
 
 .briefing-lines {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .briefing-lines p {
   margin: 0;
-  color: rgba(16, 24, 40, 0.88);
-  font-size: 14px;
-  line-height: 1.58;
+  color: rgba(16, 24, 40, 0.8);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .message {
@@ -894,7 +903,7 @@ select:focus {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 156px;
   gap: 18px;
-  min-height: 184px;
+  min-height: 172px;
   padding: 18px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 8px;
@@ -939,7 +948,7 @@ select:focus {
 .article-content {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .article-meta-row {
@@ -952,7 +961,8 @@ select:focus {
 .article-meta,
 .article-tags,
 .article-footer,
-.related-links {
+.related-links,
+.related-strip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1005,10 +1015,10 @@ select:focus {
 
 .article-summary {
   margin: 0;
-  max-width: 72ch;
+  max-width: 68ch;
   color: rgba(16, 24, 40, 0.82);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .article-tags span,
@@ -1016,20 +1026,15 @@ select:focus {
 .related-link {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
+  min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   text-decoration: none;
 }
 
 .article-tags span {
-  background: rgba(79, 107, 255, 0.08);
-  color: var(--accent-strong);
-}
-
-.article-tags span:nth-child(odd) {
   background: rgba(255, 122, 89, 0.1);
   color: #b54708;
 }
@@ -1040,9 +1045,21 @@ select:focus {
 
 .article-footer span,
 .related-link {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--muted-strong);
+}
+
+.related-strip {
+  gap: 10px;
+}
+
+.related-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .article-image {
