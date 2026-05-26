@@ -22,11 +22,13 @@ const USER_TAGS_FILE = path.join(DATA_DIR, "user-tags.json");
 const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push-subscriptions.json");
 const VAPID_KEYS_FILE = path.join(DATA_DIR, "vapid-keys.json");
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const ARTICLE_IMAGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const GDELT_DELAY_MS = 5500;
 const ALERT_MONITOR_TICK_MS = 60 * 1000;
 
 const cache = new Map();
 const tickerCache = new Map();
+const articleImageCache = new Map();
 let gdeltQueue = Promise.resolve();
 let gdeltNextAt = 0;
 let alertMonitorRunning = false;
@@ -585,6 +587,7 @@ async function fetchNews(request) {
     throw new Error(errors.length ? errors.join("; ") : "Новости отсутствуют.");
   }
 
+  await enrichArticleImages(processed);
   const clusters = buildStoryClusters(processed).slice(0, request.limit);
   const requestInfo = buildRequestInfo(request, collected.some((article) => article.resolvedSource === "auto") ? "auto" : inferPrimarySource(clusters));
 
@@ -682,16 +685,19 @@ function parseGoogleRss(xml, topic = "") {
 
   return items.map((item) => {
     const source = parseGoogleSource(item.source);
+    const url = normalizeFeedLink(item.link);
+    const description = readFeedText(item.description);
     return {
       title: cleanGoogleTitle(cleanText(item.title), source.name),
-      url: item.link,
-      image: "",
-      domain: source.name || getDomain(item.link),
+      url,
+      image: extractFeedImage(item, url, description),
+      domain: source.name || getDomain(url),
       sourceCountry: "",
       language: "English",
       publishedAt: normalizeDate(item.pubDate),
       provider: "Google News",
-      tags: inferTags(item.title, topic)
+      tags: inferTags(`${item.title || ""} ${description}`, topic),
+      summary: cleanText(stripHtml(description))
     };
   });
 }
@@ -799,13 +805,14 @@ async function fetchRssFeed(feed) {
 
   return items.map((item) => {
     const title = cleanText(decodeHtml(readFeedText(item.title)));
-    const summary = cleanText(stripHtml(readFeedText(item.description || item.summary || item["content:encoded"] || item.content)));
+    const rawContent = readFeedText(item.description || item.summary || item["content:encoded"] || item.content);
+    const summary = cleanText(stripHtml(rawContent));
     const url = normalizeFeedLink(item.link || item.guid || item.id);
 
     return {
       title,
       url,
-      image: "",
+      image: extractFeedImage(item, url, rawContent),
       domain: feed.label,
       sourceCountry: "",
       language: "English",
@@ -969,6 +976,58 @@ function sortArticlesForRequest(articles, request) {
   }
 
   return deduped.sort(comparator);
+}
+
+async function enrichArticleImages(articles) {
+  await runWithConcurrency(
+    articles.filter((article) => shouldRefreshArticleImage(article)),
+    4,
+    async (article) => {
+      const resolved = await resolveArticleImage(article.url, article.image);
+      if (resolved) article.image = resolved;
+    }
+  );
+}
+
+function shouldRefreshArticleImage(article) {
+  if (!article?.url) return false;
+  if (!article.image) return true;
+  return isGenericAggregatorImage(article.image, article.url);
+}
+
+async function resolveArticleImage(url, fallbackImage = "") {
+  const key = String(url || "").split("#")[0];
+  if (!key) return fallbackImage || "";
+
+  const cached = articleImageCache.get(key);
+  if (cached && Date.now() - cached.createdAt < ARTICLE_IMAGE_CACHE_TTL_MS) {
+    return cached.value || fallbackImage || "";
+  }
+
+  try {
+    const { html, finalUrl } = await fetchHtml(key, 7000);
+    const image = extractPagePreviewImage(html, finalUrl || key) || fallbackImage || "";
+    articleImageCache.set(key, { createdAt: Date.now(), value: image });
+    return image;
+  } catch {
+    articleImageCache.set(key, { createdAt: Date.now(), value: fallbackImage || "" });
+    return fallbackImage || "";
+  }
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  if (!items.length) return;
+  let index = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const current = items[index];
+      index += 1;
+      await worker(current);
+    }
+  });
+
+  await Promise.allSettled(runners);
 }
 
 function compareArticlesByRelevance(a, b) {
@@ -1342,6 +1401,11 @@ async function fetchJson(url, timeoutMs) {
 }
 
 async function fetchText(url, timeoutMs) {
+  const { html } = await fetchHtml(url, timeoutMs);
+  return html;
+}
+
+async function fetchHtml(url, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -1360,7 +1424,7 @@ async function fetchText(url, timeoutMs) {
     if (/please limit requests/i.test(text)) {
       throw new Error("Источник просит делать запросы реже. Попробуйте еще раз через несколько секунд.");
     }
-    return text;
+    return { html: text, finalUrl: response.url || url };
   } catch (error) {
     if (error.name === "AbortError") {
       throw new Error("Источник новостей не ответил вовремя.");
@@ -2047,6 +2111,121 @@ function readFeedText(value) {
   if (Array.isArray(value)) return value.map(readFeedText).join(" ");
   if (typeof value === "object") return readFeedText(value.text || value["#text"] || value._ || value.href || "");
   return "";
+}
+
+function extractFeedImage(item, baseUrl = "", html = "") {
+  const candidates = [
+    item?.enclosure,
+    item?.["media:content"],
+    item?.["media:thumbnail"],
+    item?.["media:group"]?.["media:content"],
+    item?.["media:group"]?.["media:thumbnail"],
+    item?.thumbnail,
+    item?.image
+  ]
+    .flatMap(collectImageCandidates)
+    .concat(extractImageUrlsFromHtml(html, baseUrl));
+
+  return candidates.find(Boolean) || "";
+}
+
+function collectImageCandidates(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap(collectImageCandidates);
+
+  if (typeof value === "string") {
+    return looksLikeImageUrl(value) ? [value] : [];
+  }
+
+  if (typeof value === "object") {
+    const url = normalizeUrl(value.url || value.href || value.link || value.src || "");
+    const type = String(value.type || "").toLowerCase();
+    const medium = String(value.medium || "").toLowerCase();
+    if (url && (looksLikeImageUrl(url) || type.startsWith("image/") || medium === "image")) {
+      return [url];
+    }
+  }
+
+  return [];
+}
+
+function extractPagePreviewImage(html, baseUrl) {
+  const sources = [
+    extractMetaContent(html, /<meta[^>]+property=["']og:image(?::url)?["'][^>]+content=["']([^"']+)["']/i),
+    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::url)?["']/i),
+    extractMetaContent(html, /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i),
+    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i),
+    extractMetaContent(html, /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["']/i),
+    extractMetaContent(html, /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i),
+    ...extractImageUrlsFromHtml(html, baseUrl)
+  ];
+
+  for (const source of sources) {
+    const normalized = absolutizeUrl(source, baseUrl);
+    if (isViableNewsImage(normalized)) return normalized;
+  }
+
+  return "";
+}
+
+function extractMetaContent(html, pattern) {
+  const match = String(html || "").match(pattern);
+  return cleanText(decodeHtml(match?.[1] || ""));
+}
+
+function extractImageUrlsFromHtml(html, baseUrl = "") {
+  const matches = [];
+  const source = String(html || "");
+  const imagePattern = /<img[^>]+src=["']([^"']+)["']/gi;
+  let match;
+
+  while ((match = imagePattern.exec(source))) {
+    const normalized = absolutizeUrl(match[1], baseUrl);
+    if (normalized) matches.push(normalized);
+  }
+
+  return matches;
+}
+
+function isViableNewsImage(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return false;
+  const lower = url.toLowerCase();
+  if (lower.startsWith("data:")) return false;
+  if (/(logo|sprite|icon|avatar|favicon|amphtml|pixel|tracking)/i.test(lower)) return false;
+  return true;
+}
+
+function isGenericAggregatorImage(imageUrl, articleUrl) {
+  const imageHost = getDomain(imageUrl);
+  const articleHost = getDomain(articleUrl);
+  if (!imageHost) return false;
+  if (imageHost.includes("googleusercontent.com") && articleHost.includes("news.google.com")) return true;
+  return false;
+}
+
+function looksLikeImageUrl(url) {
+  return /\.(avif|gif|jpe?g|png|webp)(?:[?#]|$)/i.test(String(url || ""));
+}
+
+function absolutizeUrl(value, baseUrl) {
+  const url = cleanText(decodeHtml(String(value || "")));
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  if (!baseUrl) return "";
+
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeUrl(value) {
+  const url = cleanText(decodeHtml(String(value || "")));
+  if (!url) return "";
+  if (url.startsWith("//")) return `https:${url}`;
+  return url;
 }
 
 function normalizeFeedLink(value) {
