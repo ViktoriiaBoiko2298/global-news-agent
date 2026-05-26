@@ -263,6 +263,12 @@ const personalFinanceTerms = [
   "hysa", "paycheck", "college", "tuition"
 ];
 
+const companyNoiseWords = new Set([
+  "inc", "inc.", "corp", "corp.", "corporation", "company", "co", "co.", "group", "holdings",
+  "holding", "ltd", "ltd.", "limited", "plc", "llc", "sa", "ag", "nv", "the", "and", "class",
+  "ordinary", "common", "shares"
+]);
+
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -569,10 +575,12 @@ async function fetchNews(request) {
   const providers = getProviderPlan(request.source);
   const errors = [];
   const collected = [];
+  let successfulProviders = 0;
 
   for (const provider of providers) {
     try {
       const articles = await fetchProviderArticles(provider, request);
+      successfulProviders += 1;
       collected.push(...articles.map((article) => ({ ...article, resolvedSource: provider.source })));
 
       const processed = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
@@ -584,7 +592,7 @@ async function fetchNews(request) {
 
   const processed = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
   if (!processed.length) {
-    throw new Error(errors.length ? errors.join("; ") : "Новости отсутствуют.");
+    throw new Error(successfulProviders > 0 ? "Новости отсутствуют." : errors.length ? errors.join("; ") : "Новости отсутствуют.");
   }
 
   await enrichArticleImages(processed);
@@ -902,9 +910,18 @@ function articleMatchesRequest(article, request) {
 
   if (filters.focus !== "all" && !articleMatchesFocus(article, filters.focus)) return false;
 
-  if (request.mode === "custom") return score >= minScoreForRequest(request, "custom");
-  if (request.mode === "ticker") return score >= minScoreForRequest(request, "ticker");
-  if (request.mode === "commodity") return score >= minScoreForRequest(request, "commodity");
+  if (request.mode === "custom") {
+    if (!articleHasCustomMatch(article, request)) return false;
+    return score >= minScoreForRequest(request, "custom");
+  }
+  if (request.mode === "ticker") {
+    if (!articleHasTickerMatch(article, request)) return false;
+    return score >= minScoreForRequest(request, "ticker");
+  }
+  if (request.mode === "commodity") {
+    if (!articleHasCommodityMatch(article, request)) return false;
+    return score >= minScoreForRequest(request, "commodity");
+  }
   return true;
 }
 
@@ -1108,6 +1125,9 @@ function scoreArticleForRequest(article, request) {
   }
 
   if (request.filters?.focus !== "all" && articleMatchesFocus(article, request.filters.focus)) score += 4;
+  if (request.mode === "ticker") score += tickerMentionStrength(article, request);
+  if (request.mode === "commodity") score += commodityMentionStrength(article, request);
+  if (request.mode === "custom") score += customTopicStrength(article, request);
   if (request.mode === "world" && request.category === "stocks") {
     score += stockMentionStrength(article);
   }
@@ -1128,6 +1148,112 @@ function articleMatchesFocus(article, focus) {
   if (focus === "tech") return tags.has("технологии");
   if (focus === "science") return tags.has("наука") || tags.has("здоровье");
   return true;
+}
+
+function articleHasTickerMatch(article, request) {
+  return tickerMentionStrength(article, request) >= minTickerMentionStrength(request);
+}
+
+function articleHasCommodityMatch(article, request) {
+  return commodityMentionStrength(article, request) >= 2;
+}
+
+function articleHasCustomMatch(article, request) {
+  if (request.parsedQuery?.topicTerms?.length) {
+    return customTopicStrength(article, request) >= 2;
+  }
+  if (request.parsedQuery?.country) {
+    return countryMentionStrength(article, request.parsedQuery.country) > 0;
+  }
+  return true;
+}
+
+function tickerMentionStrength(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""} ${article.url || ""}`.toLowerCase();
+  const symbol = String(request.tickerSymbol || "").toUpperCase();
+  const symbolLower = symbol.toLowerCase();
+  const company = cleanText(request.company || "").toLowerCase();
+  const companyTokens = getCompanyIdentityTerms(request.company || "");
+  let score = 0;
+
+  if (symbol) {
+    if (matchesTickerSymbol(title, symbol)) score += 12;
+    else if (matchesTickerSymbol(text, symbol)) score += 8;
+    if (title.includes(`$${symbolLower}`) || text.includes(`$${symbolLower}`)) score += 2;
+  }
+
+  if (company && company !== symbolLower) {
+    if (matchesNewsTerm(title, company)) score += 10;
+    else if (matchesNewsTerm(text, company)) score += 6;
+  }
+
+  const titleTokenHits = countDistinctTermMatches(title, companyTokens);
+  const textTokenHits = countDistinctTermMatches(text, companyTokens);
+
+  if (titleTokenHits >= 2) score += 7;
+  else if (titleTokenHits === 1 && companyTokens.length === 1) score += 3;
+
+  if (textTokenHits >= 2) score += 4;
+  else if (textTokenHits === 1 && companyTokens.length === 1) score += 1;
+
+  return score;
+}
+
+function commodityMentionStrength(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""}`.toLowerCase();
+  let score = 0;
+
+  for (const term of request.commodityKeywords || []) {
+    const normalized = cleanText(term).toLowerCase();
+    if (!normalized) continue;
+    if (matchesNewsTerm(title, normalized)) score += 3;
+    else if (matchesNewsTerm(text, normalized)) score += 1;
+  }
+
+  return score;
+}
+
+function customTopicStrength(article, request) {
+  const terms = request.parsedQuery?.topicTerms || [];
+  if (!terms.length) return 0;
+
+  const title = String(article.title || "").toLowerCase();
+  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""}`.toLowerCase();
+  let score = 0;
+
+  for (const term of terms) {
+    if (matchesNewsTerm(title, term)) score += 3;
+    else if (matchesNewsTerm(text, term)) score += 1;
+  }
+
+  return score;
+}
+
+function getCompanyIdentityTerms(company) {
+  return compactTerms(
+    String(company || "")
+      .split(/[^a-z0-9]+/i)
+      .map((term) => term.toLowerCase())
+      .filter((term) => term.length > 2 && !companyNoiseWords.has(term))
+  );
+}
+
+function countDistinctTermMatches(value, terms) {
+  if (!terms.length) return 0;
+  return terms.reduce((count, term) => count + (matchesNewsTerm(value, term) ? 1 : 0), 0);
+}
+
+function matchesTickerSymbol(value, symbol) {
+  if (!value || !symbol) return false;
+  return new RegExp(`(^|[^a-z0-9])\\$?${escapeRegExp(symbol.toLowerCase())}([^a-z0-9]|$)`, "i").test(value);
+}
+
+function minTickerMentionStrength(request) {
+  const matchMode = request.filters?.matchMode || "balanced";
+  const thresholds = { strict: 11, balanced: 8, broad: 6 };
+  return thresholds[matchMode] ?? thresholds.balanced;
 }
 
 function stockMentionStrength(article) {
