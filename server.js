@@ -130,6 +130,7 @@ const sourcePresets = {
   auto: "Авто: Google + сайты",
   google: "Google News",
   feeds: "Популярные сайты",
+  stocktitan: "Stock Titan",
   yahoo: "Yahoo Finance",
   investing: "Investing.com",
   benzinga: "Benzinga",
@@ -227,6 +228,7 @@ const countryPrimaryTerms = {
 
 const sourceProfiles = {
   "google news": { tier: "major", type: "aggregator", quality: 80 },
+  "stock titan": { tier: "market", type: "news-feed", quality: 76 },
   "yahoo finance": { tier: "market", type: "finance", quality: 74 },
   "investing.com": { tier: "market", type: "finance", quality: 72 },
   benzinga: { tier: "market", type: "market-blog", quality: 70 },
@@ -243,6 +245,21 @@ const sourceProfiles = {
   bbc: { tier: "major", type: "public-media", quality: 88 },
   gdelt: { tier: "specialist", type: "dataset", quality: 65 }
 };
+
+const stockMarketTerms = [
+  "stock", "stocks", "equity", "equities", "shares", "share price", "stock price",
+  "earnings", "revenue", "guidance", "analyst", "analysts", "upgrade", "downgrade",
+  "price target", "buyback", "share repurchase", "ipo", "secondary offering",
+  "dividend", "market cap", "nasdaq", "nyse", "s&p 500", "dow jones", "russell 2000",
+  "premarket", "pre-market", "after-hours", "after hours", "trading", "ticker", "etf",
+  "otc", "listed", "listing", "warrant", "warrants"
+];
+
+const personalFinanceTerms = [
+  "savings account", "retirement", "401(k", "401k", "debt", "mortgage", "credit card",
+  "budget", "emergency fund", "student loan", "financial advisor", "high-yield savings",
+  "hysa", "paycheck", "college", "tuition"
+];
 
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "public")));
@@ -565,7 +582,7 @@ async function fetchNews(request) {
 
   const processed = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
   if (!processed.length) {
-    throw new Error(errors.length ? errors.join("; ") : "Новости не найдены.");
+    throw new Error(errors.length ? errors.join("; ") : "Новости отсутствуют.");
   }
 
   const clusters = buildStoryClusters(processed).slice(0, request.limit);
@@ -744,7 +761,13 @@ function getWorldPriority(article, category) {
   if (category === "politics") return tags.has("политика") || tags.has("геополитика") ? 3 : 1;
   if (category === "ordinary") return tags.has("политика") || tags.has("геополитика") ? 0 : 2;
   if (category === "economy") return tags.has("экономика") || tags.has("рынки") || tags.has("макро") ? 3 : 1;
-  if (category === "stocks") return tags.has("акции") || tags.has("рынки") || tags.has("макро") ? 3 : 1;
+  if (category === "stocks") {
+    const strength = stockMentionStrength(article);
+    if (strength >= 8) return 6;
+    if (strength >= 5) return 4;
+    if (strength >= 3) return 2;
+    return 0;
+  }
   if (category === "crypto") return tags.has("крипта") ? 4 : tags.has("рынки") ? 2 : 1;
   if (category === "technology") return tags.has("технологии") || tags.has("наука") ? 3 : 1;
 
@@ -797,12 +820,14 @@ async function fetchRssFeed(feed) {
 function getRssFeedsForRequest(request, sourceMode) {
   const selectedSources =
     sourceMode === "feeds"
-      ? ["yahoo", "investing", "benzinga", "cnbc", "marketwatch", "nytimes", "npr", "fox"]
+      ? ["stocktitan", "yahoo", "investing", "benzinga", "cnbc", "marketwatch", "nytimes", "npr", "fox"]
       : [sourceMode];
   const feeds = [];
   const add = (source, label, url, topic = "") => {
     if (selectedSources.includes(source)) feeds.push({ source, label, url, topic });
   };
+
+  add("stocktitan", "Stock Titan", "https://www.stocktitan.net/rss", "BUSINESS");
 
   add("yahoo", "Yahoo Finance", "https://finance.yahoo.com/rss/topstories", "BUSINESS");
   if (request.tickerSymbol) {
@@ -863,7 +888,7 @@ function articleMatchesRequest(article, request) {
     if (request.category === "politics" && !(tags.has("политика") || tags.has("геополитика"))) return false;
     if (request.category === "ordinary" && (tags.has("политика") || tags.has("геополитика"))) return false;
     if (request.category === "economy" && !(tags.has("экономика") || tags.has("рынки") || tags.has("макро"))) return false;
-    if (request.category === "stocks" && !(tags.has("акции") || tags.has("рынки") || tags.has("макро"))) return false;
+    if (request.category === "stocks" && !isStockMarketArticle(article)) return false;
     if (request.category === "crypto" && !tags.has("крипта")) return false;
     if (request.category === "technology" && !(tags.has("технологии") || tags.has("наука"))) return false;
   }
@@ -1024,6 +1049,9 @@ function scoreArticleForRequest(article, request) {
   }
 
   if (request.filters?.focus !== "all" && articleMatchesFocus(article, request.filters.focus)) score += 4;
+  if (request.mode === "world" && request.category === "stocks") {
+    score += stockMentionStrength(article);
+  }
   if (request.mode === "world") score += getWorldPriority(article, request.category || "all");
 
   return score;
@@ -1034,13 +1062,54 @@ function articleMatchesFocus(article, focus) {
   const tags = new Set(article.tags || []);
   if (focus === "politics") return tags.has("политика") || tags.has("геополитика");
   if (focus === "markets") return tags.has("рынки") || tags.has("макро") || tags.has("экономика");
-  if (focus === "stocks") return tags.has("акции") || tags.has("рынки");
+  if (focus === "stocks") return isStockMarketArticle(article);
   if (focus === "crypto") return tags.has("крипта");
   if (focus === "companies") return tags.has("рынки") || tags.has("экономика");
   if (focus === "commodities") return tags.has("сырье");
   if (focus === "tech") return tags.has("технологии");
   if (focus === "science") return tags.has("наука") || tags.has("здоровье");
   return true;
+}
+
+function stockMentionStrength(article) {
+  const title = String(article.title || "").toLowerCase();
+  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""} ${article.provider || ""}`.toLowerCase();
+  let score = 0;
+
+  for (const term of stockMarketTerms) {
+    if (matchesNewsTerm(title, term)) score += 3;
+    else if (matchesNewsTerm(text, term)) score += 1;
+  }
+
+  const quality = inferSourceQuality(article);
+  if (quality.tier === "market") score += 1;
+  if ((article.tags || []).includes("акции")) score += 4;
+  if ((article.tags || []).includes("рынки")) score += 1;
+  if ((article.tags || []).includes("крипта")) score -= 2;
+
+  return score;
+}
+
+function hasStockTitleSignal(article) {
+  const title = String(article.title || "").toLowerCase();
+  return stockMarketTerms.some((term) => matchesNewsTerm(title, term));
+}
+
+function isPersonalFinanceArticle(article) {
+  const text = `${article.title || ""} ${article.summary || ""}`.toLowerCase();
+  return personalFinanceTerms.some((term) => matchesNewsTerm(text, term));
+}
+
+function isStockMarketArticle(article) {
+  const tags = new Set(article.tags || []);
+  const strength = stockMentionStrength(article);
+  const titleSignal = hasStockTitleSignal(article);
+
+  if (isPersonalFinanceArticle(article) && !titleSignal) return false;
+  if (!titleSignal && !tags.has("акции")) return false;
+  if (tags.has("акции") && strength >= 4) return true;
+  if (strength >= 6) return true;
+  return false;
 }
 
 function sourceAllowed(article, filters) {

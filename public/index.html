@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#cb6043" />
+    <meta name="theme-color" content="#0f1728" />
     <title>News Agent</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -24,13 +24,18 @@
           <p class="eyebrow">Signal desk</p>
           <div class="headline-row">
             <h1>News Agent</h1>
-            <p class="hero-note">World, markets, companies, commodities.</p>
+            <p class="hero-note">Global radar for world events, equities, crypto, commodities, and company signals.</p>
           </div>
         </div>
         <div class="status-stack">
+          <div class="locale-switch" aria-label="Language switcher">
+            <button class="locale-button active" id="localeEnButton" type="button" data-locale="en">EN</button>
+            <button class="locale-button" id="localeRuButton" type="button" data-locale="ru">RU</button>
+            <button class="locale-button" id="localeUkButton" type="button" data-locale="uk">UK</button>
+          </div>
           <div class="status-pill" id="connectionStatus">
             <span class="dot"></span>
-            <span>готов</span>
+            <span>ready</span>
           </div>
           <div class="signal-ribbon" aria-hidden="true">
             <span>Politics</span>
@@ -42,75 +47,75 @@
       </header>
 
       <main class="workspace">
-        <section class="control-panel" aria-label="Панель поиска">
+        <section class="control-panel" aria-label="Search panel">
           <div class="panel-topline">
             <p class="eyebrow">Command deck</p>
             <span class="panel-code">Live filters</span>
           </div>
-          <div class="tabs" role="tablist" aria-label="Режим поиска">
+          <div class="tabs" role="tablist" aria-label="Search mode">
             <button class="tab active" type="button" data-mode="world">
               <i data-lucide="globe-2"></i>
-              24 часа
+              <span>24h</span>
             </button>
             <button class="tab" type="button" data-mode="ticker">
               <i data-lucide="badge-dollar-sign"></i>
-              Тикер
+              <span>Ticker</span>
             </button>
             <button class="tab" type="button" data-mode="commodity">
               <i data-lucide="pickaxe"></i>
-              Сырье
+              <span>Commodities</span>
             </button>
             <button class="tab" type="button" data-mode="custom">
               <i data-lucide="search"></i>
-              Запрос
+              <span>Query</span>
             </button>
           </div>
 
           <form class="search-form" id="searchForm">
             <div class="field mode-field" data-field="world">
-              <label for="worldCategorySelect">Темы</label>
+              <label for="worldCategorySelect">Topics</label>
               <select id="worldCategorySelect" name="category"></select>
             </div>
 
             <div class="field mode-field" data-field="ticker" hidden>
-              <label for="tickerInput">Тикер</label>
+              <label for="tickerInput">Ticker</label>
               <input id="tickerInput" name="ticker" autocomplete="off" placeholder="NVDA" />
             </div>
 
             <div class="field mode-field" data-field="commodity" hidden>
-              <label for="commoditySelect">Товар</label>
+              <label for="commoditySelect">Asset</label>
               <select id="commoditySelect" name="commodity"></select>
             </div>
 
             <div class="field mode-field" data-field="custom" hidden>
-              <label for="queryInput">Запрос</label>
+              <label for="queryInput">Query</label>
               <input id="queryInput" name="query" autocomplete="off" placeholder="central bank gold buying" />
             </div>
 
             <div class="field">
-              <label for="timespanSelect">Период</label>
+              <label for="timespanSelect">Time range</label>
               <select id="timespanSelect" name="timespan">
-                <option value="1h">1 час</option>
-                <option value="6h">6 часов</option>
-                <option value="12h">12 часов</option>
-                <option value="24h" selected>24 часа</option>
-                <option value="48h">48 часов</option>
-                <option value="72h">72 часа</option>
-                <option value="7d">7 дней</option>
+                <option value="1h">1 hour</option>
+                <option value="6h">6 hours</option>
+                <option value="12h">12 hours</option>
+                <option value="24h" selected>24 hours</option>
+                <option value="48h">48 hours</option>
+                <option value="72h">72 hours</option>
+                <option value="7d">7 days</option>
               </select>
             </div>
 
             <div class="field">
-              <label for="sourceSelect">Источник</label>
+              <label for="sourceSelect">Source</label>
               <select id="sourceSelect" name="source">
-                <option value="auto" selected>Авто</option>
+                <option value="auto" selected>Auto</option>
                 <option value="gdelt">GDELT</option>
                 <option value="google">Google News</option>
               </select>
             </div>
 
             <div class="field small">
-              <label for="limitSelect">Лимит</label>
+              <label for="limitSelect">Limit</label>
               <select id="limitSelect" name="limit">
                 <option value="15">15</option>
                 <option value="30" selected>30</option>
@@ -120,58 +125,58 @@
             </div>
 
             <div class="field">
-              <label for="countryInput">Страна</label>
+              <label for="countryInput">Country</label>
               <input id="countryInput" name="country" autocomplete="off" placeholder="Canada" />
             </div>
 
             <div class="field">
-              <label for="languageSelect">Язык</label>
+              <label for="languageSelect">Language</label>
               <select id="languageSelect" name="language"></select>
             </div>
 
             <div class="field">
-              <label for="focusSelect">Фокус</label>
+              <label for="focusSelect">Focus</label>
               <select id="focusSelect" name="focus"></select>
             </div>
 
             <div class="field">
-              <label for="sourceTypeSelect">Тип источника</label>
+              <label for="sourceTypeSelect">Source type</label>
               <select id="sourceTypeSelect" name="sourceType"></select>
             </div>
 
             <div class="field">
-              <label for="sortModeSelect">Сортировка</label>
+              <label for="sortModeSelect">Sort</label>
               <select id="sortModeSelect" name="sortMode"></select>
             </div>
 
             <div class="field">
-              <label for="matchModeSelect">Совпадение</label>
+              <label for="matchModeSelect">Match</label>
               <select id="matchModeSelect" name="matchMode"></select>
             </div>
 
             <div class="field">
-              <label for="excludeInputCustom">Минус-слова</label>
+              <label for="excludeInputCustom">Exclude terms</label>
               <input id="excludeInputCustom" name="excludeCustom" autocomplete="off" placeholder="hockey, weather" />
             </div>
 
             <div class="field">
-              <label for="sourceIncludeInput">Только источники</label>
+              <label for="sourceIncludeInput">Include sources</label>
               <input id="sourceIncludeInput" name="sourceInclude" autocomplete="off" placeholder="reuters, bbc, cnbc" />
             </div>
 
             <div class="field">
-              <label for="sourceExcludeInput">Минус-источники</label>
+              <label for="sourceExcludeInput">Exclude sources</label>
               <input id="sourceExcludeInput" name="sourceExclude" autocomplete="off" placeholder="fox, blog, tabloid" />
             </div>
 
             <div class="actions">
               <button class="primary" type="submit">
                 <i data-lucide="radar"></i>
-                Найти
+                <span>Search</span>
               </button>
               <button class="ghost" id="saveWatchButton" type="button">
                 <i data-lucide="bookmark-plus"></i>
-                Закрепить
+                <span>Save</span>
               </button>
             </div>
           </form>
@@ -179,11 +184,11 @@
           <div class="quick-actions">
             <button class="ghost small-action" id="shareSearchButton" type="button">
               <i data-lucide="share-2"></i>
-              Поделиться
+              <span>Share</span>
             </button>
             <button class="ghost small-action" id="createAlertButton" type="button">
               <i data-lucide="bell-plus"></i>
-              Алерт
+              <span>Alert</span>
             </button>
           </div>
 
@@ -191,40 +196,21 @@
             <label class="switch">
               <input id="autoRefreshToggle" type="checkbox" checked />
               <span></span>
-              Автообновление
+              <span class="switch-label">Auto-refresh</span>
             </label>
             <select id="refreshInterval">
-              <option value="300000">5 минут</option>
-              <option value="900000" selected>15 минут</option>
-              <option value="1800000">30 минут</option>
+              <option value="300000">5 min</option>
+              <option value="900000" selected>15 min</option>
+              <option value="1800000">30 min</option>
             </select>
           </div>
         </section>
 
-        <aside class="side-panel" aria-label="Сводка">
-          <section class="metric-band">
-            <div>
-              <span class="metric-label">Найдено</span>
-              <strong id="totalCount">0</strong>
-            </div>
-            <div>
-              <span class="metric-label">Источник</span>
-              <strong id="sourceName">-</strong>
-            </div>
-            <div>
-              <span class="metric-label">Сортировка</span>
-              <strong id="sortName">-</strong>
-            </div>
-            <div>
-              <span class="metric-label">Совпадение</span>
-              <strong id="matchName">-</strong>
-            </div>
-          </section>
-
+        <aside class="side-panel" aria-label="Summary">
           <section class="watch-panel">
             <div class="panel-heading">
-              <h2>Закрепленные</h2>
-              <button class="icon-button" id="refreshWatchlist" type="button" aria-label="Обновить список">
+              <h2>Saved</h2>
+              <button class="icon-button" id="refreshWatchlist" type="button" aria-label="Refresh saved list">
                 <i data-lucide="refresh-cw"></i>
               </button>
             </div>
@@ -233,24 +219,24 @@
 
           <section class="watch-panel">
             <div class="panel-heading">
-              <h2>Алерты</h2>
+              <h2>Alerts</h2>
               <div class="panel-actions">
-                <button class="icon-button" id="enableNotificationsButton" type="button" aria-label="Включить уведомления">
+                <button class="icon-button" id="enableNotificationsButton" type="button" aria-label="Enable notifications">
                   <i data-lucide="bell"></i>
                 </button>
-                <button class="icon-button" id="refreshAlerts" type="button" aria-label="Проверить алерты">
+                <button class="icon-button" id="refreshAlerts" type="button" aria-label="Check alerts">
                   <i data-lucide="bell-ring"></i>
                 </button>
               </div>
             </div>
-            <div class="mini-status" id="notificationStatus">Уведомления выключены</div>
+            <div class="mini-status" id="notificationStatus">Notifications off</div>
             <div class="watchlist" id="alertsList"></div>
           </section>
 
           <section class="watch-panel">
             <div class="panel-heading">
-              <h2>История</h2>
-              <button class="icon-button" id="refreshHistory" type="button" aria-label="Обновить историю">
+              <h2>History</h2>
+              <button class="icon-button" id="refreshHistory" type="button" aria-label="Refresh history">
                 <i data-lucide="history"></i>
               </button>
             </div>
@@ -259,8 +245,8 @@
 
           <section class="stats-panel">
             <div class="panel-heading compact-heading">
-              <h2>Мои теги</h2>
-              <button class="icon-button" id="saveUserTagButton" type="button" aria-label="Добавить пользовательский тег">
+              <h2>My tags</h2>
+              <button class="icon-button" id="saveUserTagButton" type="button" aria-label="Add custom tag">
                 <i data-lucide="plus"></i>
               </button>
             </div>
@@ -272,8 +258,8 @@
 
           <section class="stats-panel">
             <div class="panel-heading compact-heading">
-              <h2>Темы ленты</h2>
-              <button class="icon-button" id="clearTagFilterButton" type="button" aria-label="Сбросить фильтр тем">
+              <h2>Feed topics</h2>
+              <button class="icon-button" id="clearTagFilterButton" type="button" aria-label="Reset topic filter">
                 <i data-lucide="filter-x"></i>
               </button>
             </div>
@@ -281,11 +267,11 @@
           </section>
         </aside>
 
-        <section class="results-panel" aria-label="Новости">
+        <section class="results-panel" aria-label="News">
           <div class="results-head">
             <div class="results-title-block">
-              <p class="eyebrow" id="activeMode">Мировые новости</p>
-              <h2 id="activeLabel">Последние 24 часа</h2>
+              <p class="eyebrow" id="activeMode">World news</p>
+              <h2 id="activeLabel">Latest 24 hours</h2>
             </div>
             <div class="results-timestamp">
               <span class="timestamp-label">Updated</span>
@@ -303,6 +289,48 @@
           <div class="results-list" id="resultsList"></div>
         </section>
       </main>
+    </div>
+
+    <div class="share-overlay" id="shareOverlay" hidden>
+      <div class="share-dialog" role="dialog" aria-modal="true" aria-labelledby="shareDialogTitle">
+        <div class="share-dialog-head">
+          <div>
+            <p class="eyebrow">Share</p>
+            <h2 id="shareDialogTitle">Share</h2>
+          </div>
+          <button class="icon-button" id="closeShareDialogButton" type="button" aria-label="Close share dialog">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <p class="share-caption" id="shareCaption">Share the current page.</p>
+        <div class="share-grid">
+          <button class="share-tile" type="button" data-share-target="x">
+            <i data-lucide="twitter"></i>
+            <span>X</span>
+          </button>
+          <button class="share-tile" type="button" data-share-target="facebook">
+            <i data-lucide="facebook"></i>
+            <span>Facebook</span>
+          </button>
+          <button class="share-tile" type="button" data-share-target="linkedin">
+            <i data-lucide="linkedin"></i>
+            <span>LinkedIn</span>
+          </button>
+          <button class="share-tile" type="button" data-share-target="instagram">
+            <i data-lucide="instagram"></i>
+            <span>Instagram</span>
+          </button>
+          <button class="share-tile" type="button" data-share-target="native">
+            <i data-lucide="send"></i>
+            <span>Share</span>
+          </button>
+          <button class="share-tile" type="button" data-share-target="copy">
+            <i data-lucide="copy"></i>
+            <span>Copy link</span>
+          </button>
+        </div>
+        <div class="share-link-preview" id="shareLinkPreview"></div>
+      </div>
     </div>
   </body>
 </html>
