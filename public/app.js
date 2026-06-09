@@ -121,11 +121,18 @@ const I18N = {
       signalDesk: "Signal desk",
       commandDeck: "Command deck",
       liveFilters: "Live filters",
+      controlIntroTitle: "Find the signal",
+      controlIntroCopy: "Search faster with a cleaner first step, then open deeper filters only when you need them.",
       languageSwitcher: "Language switcher",
       summaryPanel: "Summary",
       newsPanel: "News",
       searchPanel: "Search panel",
       searchMode: "Search mode",
+      advanced: {
+        title: "Advanced filters",
+        copy: "Country, focus, language, source rules",
+        pill: "Optional"
+      },
       tabs: { world: "24h", ticker: "Ticker", commodity: "Commodities", custom: "Query" },
       labels: {
         worldCategorySelect: "Topics",
@@ -280,11 +287,18 @@ const I18N = {
       signalDesk: "Сигнальный пульт",
       commandDeck: "Командный пульт",
       liveFilters: "Живые фильтры",
+      controlIntroTitle: "Найти сигнал",
+      controlIntroCopy: "Сначала быстрый запрос, а более глубокие фильтры открываются только когда они реально нужны.",
       languageSwitcher: "Переключение языка",
       summaryPanel: "Сводка",
       newsPanel: "Новости",
       searchPanel: "Панель поиска",
       searchMode: "Режим поиска",
+      advanced: {
+        title: "Расширенные фильтры",
+        copy: "Страна, фокус, язык и правила по источникам",
+        pill: "Опционально"
+      },
       tabs: { world: "24 часа", ticker: "Тикер", commodity: "Сырье", custom: "Запрос" },
       labels: {
         worldCategorySelect: "Темы",
@@ -439,11 +453,18 @@ const I18N = {
       signalDesk: "Сигнальний пульт",
       commandDeck: "Командний пульт",
       liveFilters: "Живі фільтри",
+      controlIntroTitle: "Знайти сигнал",
+      controlIntroCopy: "Спочатку швидкий запит, а глибші фільтри відкриваються лише коли вони справді потрібні.",
       languageSwitcher: "Перемикач мови",
       summaryPanel: "Зведення",
       newsPanel: "Новини",
       searchPanel: "Панель пошуку",
       searchMode: "Режим пошуку",
+      advanced: {
+        title: "Розширені фільтри",
+        copy: "Країна, фокус, мова та правила для джерел",
+        pill: "Опційно"
+      },
       tabs: { world: "24 години", ticker: "Тікер", commodity: "Сировина", custom: "Запит" },
       labels: {
         worldCategorySelect: "Теми",
@@ -879,6 +900,11 @@ function applyLocale() {
   });
   setText(".control-panel .panel-topline .eyebrow", ui.commandDeck);
   setText(".control-panel .panel-code", ui.liveFilters);
+  setText(".panel-intro h2", ui.controlIntroTitle);
+  setText(".panel-intro p", ui.controlIntroCopy);
+  setText(".advanced-title", ui.advanced.title);
+  setText(".advanced-copy", ui.advanced.copy);
+  setText(".advanced-pill", ui.advanced.pill);
   setText(".tab[data-mode='world'] span", ui.tabs.world);
   setText(".tab[data-mode='ticker'] span", ui.tabs.ticker);
   setText(".tab[data-mode='commodity'] span", ui.tabs.commodity);
@@ -1094,11 +1120,11 @@ function renderResults(data) {
     return;
   }
 
-  elements.resultsList.innerHTML = clusters.map(renderCluster).join("");
+  elements.resultsList.innerHTML = clusters.map((cluster, index) => renderCluster(cluster, index === 0)).join("");
   bindResultActions();
 }
 
-function renderCluster(cluster) {
+function renderCluster(cluster, featured = false) {
   const article = cluster.lead;
   const tags = selectCardTags(article.tags || [])
     .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
@@ -1117,7 +1143,7 @@ function renderCluster(cluster) {
     : "";
 
   return `
-    <article class="article-card${article.image ? "" : " no-image"}">
+    <article class="article-card${article.image ? "" : " no-image"}${featured ? " featured" : ""}">
       <div class="article-content">
         <div class="article-meta-row">
           <div class="article-meta">
@@ -1244,6 +1270,10 @@ function selectCardTags(tags) {
 function renderLoading() {
   elements.message.textContent = "";
   elements.message.hidden = true;
+  if (elements.totalCount) elements.totalCount.textContent = "—";
+  if (elements.sourceName) elements.sourceName.textContent = sourceLabel(elements.sourceSelect.value);
+  if (elements.sortName) elements.sortName.textContent = localizedMap("sortModes")[elements.sortModeSelect.value] || localizedMap("sortModes").relevance;
+  if (elements.matchName) elements.matchName.textContent = localizedMap("matchModes")[elements.matchModeSelect.value] || localizedMap("matchModes").balanced;
   elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.loading)}</p>`;
   elements.resultsList.innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton"></div>').join("");
 }
@@ -1261,6 +1291,10 @@ function renderIdleState(message = "") {
   elements.activeLabel.textContent = currentUi().results.idleLabel;
   elements.lastUpdated.textContent = "-";
   elements.summaryMode.textContent = "";
+  if (elements.totalCount) elements.totalCount.textContent = "0";
+  if (elements.sourceName) elements.sourceName.textContent = sourceLabel(elements.sourceSelect.value);
+  if (elements.sortName) elements.sortName.textContent = localizedMap("sortModes")[elements.sortModeSelect.value] || localizedMap("sortModes").relevance;
+  if (elements.matchName) elements.matchName.textContent = localizedMap("matchModes")[elements.matchModeSelect.value] || localizedMap("matchModes").balanced;
   elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
   elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(currentUi().results.idle)}</div>`;
 }

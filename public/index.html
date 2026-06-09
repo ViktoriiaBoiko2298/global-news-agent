@@ -52,6 +52,10 @@
             <p class="eyebrow">Command deck</p>
             <span class="panel-code">Live filters</span>
           </div>
+          <div class="panel-intro">
+            <h2>Find the signal</h2>
+            <p>Search faster with a cleaner first step, then open deeper filters only when you need them.</p>
+          </div>
           <div class="tabs" role="tablist" aria-label="Search mode">
             <button class="tab active" type="button" data-mode="world">
               <i data-lucide="globe-2"></i>
@@ -72,113 +76,128 @@
           </div>
 
           <form class="search-form" id="searchForm">
-            <div class="field mode-field" data-field="world">
-              <label for="worldCategorySelect">Topics</label>
-              <select id="worldCategorySelect" name="category"></select>
+            <div class="search-primary">
+              <div class="field mode-field" data-field="world">
+                <label for="worldCategorySelect">Topics</label>
+                <select id="worldCategorySelect" name="category"></select>
+              </div>
+
+              <div class="field mode-field" data-field="ticker" hidden>
+                <label for="tickerInput">Ticker</label>
+                <input id="tickerInput" name="ticker" autocomplete="off" placeholder="NVDA" />
+              </div>
+
+              <div class="field mode-field" data-field="commodity" hidden>
+                <label for="commoditySelect">Asset</label>
+                <select id="commoditySelect" name="commodity"></select>
+              </div>
+
+              <div class="field mode-field" data-field="custom" hidden>
+                <label for="queryInput">Query</label>
+                <input id="queryInput" name="query" autocomplete="off" placeholder="central bank gold buying" />
+              </div>
+
+              <div class="core-grid">
+                <div class="field">
+                  <label for="timespanSelect">Time range</label>
+                  <select id="timespanSelect" name="timespan">
+                    <option value="1h">1 hour</option>
+                    <option value="6h">6 hours</option>
+                    <option value="12h">12 hours</option>
+                    <option value="24h" selected>24 hours</option>
+                    <option value="48h">48 hours</option>
+                    <option value="72h">72 hours</option>
+                    <option value="7d">7 days</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="sourceSelect">Source</label>
+                  <select id="sourceSelect" name="source">
+                    <option value="auto" selected>Auto</option>
+                    <option value="gdelt">GDELT</option>
+                    <option value="google">Google News</option>
+                  </select>
+                </div>
+
+                <div class="field small">
+                  <label for="limitSelect">Limit</label>
+                  <select id="limitSelect" name="limit">
+                    <option value="15">15</option>
+                    <option value="30" selected>30</option>
+                    <option value="45">45</option>
+                    <option value="60">60</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="actions">
+                <button class="primary" type="submit">
+                  <i data-lucide="radar"></i>
+                  <span>Search</span>
+                </button>
+                <button class="ghost" id="saveWatchButton" type="button">
+                  <i data-lucide="bookmark-plus"></i>
+                  <span>Save</span>
+                </button>
+              </div>
             </div>
 
-            <div class="field mode-field" data-field="ticker" hidden>
-              <label for="tickerInput">Ticker</label>
-              <input id="tickerInput" name="ticker" autocomplete="off" placeholder="NVDA" />
-            </div>
+            <details class="advanced-filters">
+              <summary>
+                <div>
+                  <span class="advanced-title">Advanced filters</span>
+                  <span class="advanced-copy">Country, focus, language, source rules</span>
+                </div>
+                <span class="advanced-pill">Optional</span>
+              </summary>
+              <div class="advanced-grid">
+                <div class="field">
+                  <label for="countryInput">Country</label>
+                  <input id="countryInput" name="country" autocomplete="off" placeholder="Canada" />
+                </div>
 
-            <div class="field mode-field" data-field="commodity" hidden>
-              <label for="commoditySelect">Asset</label>
-              <select id="commoditySelect" name="commodity"></select>
-            </div>
+                <div class="field">
+                  <label for="languageSelect">Language</label>
+                  <select id="languageSelect" name="language"></select>
+                </div>
 
-            <div class="field mode-field" data-field="custom" hidden>
-              <label for="queryInput">Query</label>
-              <input id="queryInput" name="query" autocomplete="off" placeholder="central bank gold buying" />
-            </div>
+                <div class="field">
+                  <label for="focusSelect">Focus</label>
+                  <select id="focusSelect" name="focus"></select>
+                </div>
 
-            <div class="field">
-              <label for="timespanSelect">Time range</label>
-              <select id="timespanSelect" name="timespan">
-                <option value="1h">1 hour</option>
-                <option value="6h">6 hours</option>
-                <option value="12h">12 hours</option>
-                <option value="24h" selected>24 hours</option>
-                <option value="48h">48 hours</option>
-                <option value="72h">72 hours</option>
-                <option value="7d">7 days</option>
-              </select>
-            </div>
+                <div class="field">
+                  <label for="sourceTypeSelect">Source type</label>
+                  <select id="sourceTypeSelect" name="sourceType"></select>
+                </div>
 
-            <div class="field">
-              <label for="sourceSelect">Source</label>
-              <select id="sourceSelect" name="source">
-                <option value="auto" selected>Auto</option>
-                <option value="gdelt">GDELT</option>
-                <option value="google">Google News</option>
-              </select>
-            </div>
+                <div class="field">
+                  <label for="sortModeSelect">Sort</label>
+                  <select id="sortModeSelect" name="sortMode"></select>
+                </div>
 
-            <div class="field small">
-              <label for="limitSelect">Limit</label>
-              <select id="limitSelect" name="limit">
-                <option value="15">15</option>
-                <option value="30" selected>30</option>
-                <option value="45">45</option>
-                <option value="60">60</option>
-              </select>
-            </div>
+                <div class="field">
+                  <label for="matchModeSelect">Match</label>
+                  <select id="matchModeSelect" name="matchMode"></select>
+                </div>
 
-            <div class="field">
-              <label for="countryInput">Country</label>
-              <input id="countryInput" name="country" autocomplete="off" placeholder="Canada" />
-            </div>
+                <div class="field advanced-span">
+                  <label for="excludeInputCustom">Exclude terms</label>
+                  <input id="excludeInputCustom" name="excludeCustom" autocomplete="off" placeholder="hockey, weather" />
+                </div>
 
-            <div class="field">
-              <label for="languageSelect">Language</label>
-              <select id="languageSelect" name="language"></select>
-            </div>
+                <div class="field">
+                  <label for="sourceIncludeInput">Include sources</label>
+                  <input id="sourceIncludeInput" name="sourceInclude" autocomplete="off" placeholder="reuters, bbc, cnbc" />
+                </div>
 
-            <div class="field">
-              <label for="focusSelect">Focus</label>
-              <select id="focusSelect" name="focus"></select>
-            </div>
-
-            <div class="field">
-              <label for="sourceTypeSelect">Source type</label>
-              <select id="sourceTypeSelect" name="sourceType"></select>
-            </div>
-
-            <div class="field">
-              <label for="sortModeSelect">Sort</label>
-              <select id="sortModeSelect" name="sortMode"></select>
-            </div>
-
-            <div class="field">
-              <label for="matchModeSelect">Match</label>
-              <select id="matchModeSelect" name="matchMode"></select>
-            </div>
-
-            <div class="field">
-              <label for="excludeInputCustom">Exclude terms</label>
-              <input id="excludeInputCustom" name="excludeCustom" autocomplete="off" placeholder="hockey, weather" />
-            </div>
-
-            <div class="field">
-              <label for="sourceIncludeInput">Include sources</label>
-              <input id="sourceIncludeInput" name="sourceInclude" autocomplete="off" placeholder="reuters, bbc, cnbc" />
-            </div>
-
-            <div class="field">
-              <label for="sourceExcludeInput">Exclude sources</label>
-              <input id="sourceExcludeInput" name="sourceExclude" autocomplete="off" placeholder="fox, blog, tabloid" />
-            </div>
-
-            <div class="actions">
-              <button class="primary" type="submit">
-                <i data-lucide="radar"></i>
-                <span>Search</span>
-              </button>
-              <button class="ghost" id="saveWatchButton" type="button">
-                <i data-lucide="bookmark-plus"></i>
-                <span>Save</span>
-              </button>
-            </div>
+                <div class="field">
+                  <label for="sourceExcludeInput">Exclude sources</label>
+                  <input id="sourceExcludeInput" name="sourceExclude" autocomplete="off" placeholder="fox, blog, tabloid" />
+                </div>
+              </div>
+            </details>
           </form>
 
           <div class="quick-actions">
@@ -276,6 +295,24 @@
             <div class="results-timestamp">
               <span class="timestamp-label">Updated</span>
               <span id="lastUpdated">-</span>
+            </div>
+          </div>
+          <div class="metric-band">
+            <div>
+              <span class="metric-label">Found</span>
+              <strong id="totalCount">0</strong>
+            </div>
+            <div>
+              <span class="metric-label">Source</span>
+              <strong id="sourceName">Auto</strong>
+            </div>
+            <div>
+              <span class="metric-label">Sort</span>
+              <strong id="sortName">Relevance</strong>
+            </div>
+            <div>
+              <span class="metric-label">Match</span>
+              <strong id="matchName">Balanced</strong>
             </div>
           </div>
           <section class="briefing-panel" id="briefingPanel">
