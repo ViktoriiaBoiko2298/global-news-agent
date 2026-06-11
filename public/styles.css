@@ -160,7 +160,7 @@ h2 {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 0;
   margin-left: auto;
 }
 
@@ -208,7 +208,7 @@ h2 {
 }
 
 .status-pill {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 8px;
   min-height: 32px;
@@ -242,7 +242,7 @@ h2 {
 }
 
 .signal-ribbon {
-  display: inline-flex;
+  display: none;
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 8px;
