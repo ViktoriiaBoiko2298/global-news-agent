@@ -741,10 +741,7 @@ select:focus {
 }
 
 .metric-band {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0 0 14px;
+  display: none;
 }
 
 .metric-band > div,
@@ -986,7 +983,7 @@ select:focus {
 .briefing-panel {
   display: grid;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   padding: 18px 20px;
   border-radius: 24px;
   border: 1px solid rgba(15, 23, 42, 0.06);
@@ -1026,6 +1023,32 @@ select:focus {
 .results-list {
   display: grid;
   gap: 28px;
+}
+
+.idle-preview {
+  display: grid;
+  gap: 22px;
+}
+
+.idle-preview-head {
+  display: grid;
+  gap: 8px;
+  padding: 4px 6px 0;
+}
+
+.idle-preview-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.idle-preview-kicker {
+  color: var(--accent-alt);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .stream-section,
 .story-list-section {
@@ -1088,6 +1111,18 @@ select:focus {
   background:
     linear-gradient(160deg, rgba(83, 102, 255, 0.9), rgba(18, 24, 40, 0.96)),
     linear-gradient(135deg, #5165ff, #121a2c);
+}
+
+.idle-card:nth-child(2) {
+  background:
+    linear-gradient(160deg, rgba(58, 92, 255, 0.88), rgba(10, 16, 30, 0.96)),
+    linear-gradient(135deg, #4f6bff, #11192b);
+}
+
+.idle-card:nth-child(3) {
+  background:
+    linear-gradient(160deg, rgba(108, 86, 255, 0.88), rgba(13, 17, 32, 0.96)),
+    linear-gradient(135deg, #6d63ff, #131a2d);
 }
 
 .stream-card.featured {
@@ -1219,6 +1254,10 @@ select:focus {
   gap: 16px;
 }
 
+.idle-story-list {
+  gap: 14px;
+}
+
 .story-list-card {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) auto;
@@ -1253,6 +1292,13 @@ select:focus {
 .story-list-image.fallback {
   background:
     linear-gradient(135deg, rgba(79, 107, 255, 0.2), rgba(255, 122, 89, 0.14)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(237, 243, 255, 0.78));
+}
+
+.idle-story-card .story-list-image.fallback {
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.5), transparent 32%),
+    linear-gradient(135deg, rgba(79, 107, 255, 0.22), rgba(161, 174, 255, 0.3)),
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(237, 243, 255, 0.78));
 }
 

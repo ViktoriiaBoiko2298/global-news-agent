@@ -1370,7 +1370,87 @@ function renderIdleState(message = "") {
   if (elements.sortName) elements.sortName.textContent = localizedMap("sortModes")[elements.sortModeSelect.value] || localizedMap("sortModes").relevance;
   if (elements.matchName) elements.matchName.textContent = localizedMap("matchModes")[elements.matchModeSelect.value] || localizedMap("matchModes").balanced;
   elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
-  elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(currentUi().results.idle)}</div>`;
+  elements.resultsList.innerHTML = renderIdlePreview();
+}
+
+function renderIdlePreview() {
+  const ui = currentUi();
+  const preview = [
+    {
+      title: state.locale === "ru" ? "Лента мировых новостей в визуальном потоке" : state.locale === "uk" ? "Стрічка світових новин у візуальному потоці" : "World news in a visual stream",
+      summary: state.locale === "ru" ? "Выбери тему и получишь крупные lead-cards сверху и компактную ленту ниже." : state.locale === "uk" ? "Обери тему і отримаєш великі lead-cards зверху та компактну стрічку нижче." : "Pick a topic and get big lead cards on top with a compact stream below.",
+      tags: state.locale === "ru" ? ["мир", "политика"] : state.locale === "uk" ? ["світ", "політика"] : ["world", "politics"]
+    },
+    {
+      title: state.locale === "ru" ? "Тикерный режим без лишнего шума" : state.locale === "uk" ? "Тікерний режим без зайвого шуму" : "Ticker mode without the noise",
+      summary: state.locale === "ru" ? "Для NVDA, AAPL, NRED или любого другого тикера можно держать только релевантные истории." : state.locale === "uk" ? "Для NVDA, AAPL, NRED або будь-якого іншого тікера можна тримати лише релевантні історії." : "For NVDA, AAPL, NRED, or any other ticker, keep only relevant stories.",
+      tags: state.locale === "ru" ? ["тикер", "компании"] : state.locale === "uk" ? ["тікер", "компанії"] : ["ticker", "companies"]
+    },
+    {
+      title: state.locale === "ru" ? "Алерты по странам, акциям, крипте и сырью" : state.locale === "uk" ? "Алерти за країнами, акціями, криптою та сировиною" : "Alerts for countries, equities, crypto, and commodities",
+      summary: state.locale === "ru" ? "Настраивай сигналы под Canada, gold, stock market или свой кастомный запрос." : state.locale === "uk" ? "Налаштовуй сигнали під Canada, gold, stock market або свій кастомний запит." : "Set signals for Canada, gold, stock market, or your own custom query.",
+      tags: state.locale === "ru" ? ["алерты", "рынки"] : state.locale === "uk" ? ["алерти", "ринки"] : ["alerts", "markets"]
+    }
+  ];
+
+  const list = [
+    {
+      title: state.locale === "ru" ? "Политика и обычные новости за 24 часа" : state.locale === "uk" ? "Політика та звичайні новини за 24 години" : "Politics and general news in the last 24 hours",
+      summary: state.locale === "ru" ? "Подходит для быстрого обзора мира без ручной сортировки источников." : state.locale === "uk" ? "Підходить для швидкого огляду світу без ручного сортування джерел." : "Best for a fast world overview without manually sorting sources."
+    },
+    {
+      title: state.locale === "ru" ? "Умный поиск по стране и смыслу" : state.locale === "uk" ? "Розумний пошук за країною та змістом" : "Semantic search by country and topic",
+      summary: state.locale === "ru" ? "Запросы вроде Canada news или America news можно сузить без спортивного и случайного мусора." : state.locale === "uk" ? "Запити на кшталт Canada news або America news можна звузити без спортивного та випадкового шуму." : "Queries like Canada news or America news can stay focused without sports or random noise."
+    },
+    {
+      title: state.locale === "ru" ? "Отдельный поток для stock market и crypto" : state.locale === "uk" ? "Окремий потік для stock market і crypto" : "Dedicated stream for stock market and crypto",
+      summary: state.locale === "ru" ? "Режимы для рынков вынесены отдельно, чтобы не смешивать их с общей новостной повесткой." : state.locale === "uk" ? "Режими для ринків винесені окремо, щоб не змішувати їх із загальною новинною повісткою." : "Market modes are separated so they do not get mixed with the general news flow."
+    }
+  ];
+
+  return `
+    <section class="idle-preview">
+      <div class="idle-preview-head">
+        <span class="idle-preview-kicker">${escapeHtml(ui.results.idleLabel)}</span>
+        <p>${escapeHtml(ui.results.idle)}</p>
+      </div>
+      <section class="stream-section">
+        <div class="stream-section-head">
+          <h3>${escapeHtml(ui.results.topStories)}</h3>
+        </div>
+        <div class="stream-grid idle-stream-grid">
+          ${preview.map((item, index) => `
+            <article class="stream-card ${index === 0 ? "featured" : ""} no-image idle-card">
+              <div class="stream-card-overlay">
+                <div class="stream-card-top">
+                  <div class="stream-card-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+                </div>
+                <div class="stream-card-title">${escapeHtml(item.title)}</div>
+                <p class="stream-card-summary">${escapeHtml(item.summary)}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section class="story-list-section">
+        <div class="stream-section-head">
+          <h3>${escapeHtml(ui.results.moreStories)}</h3>
+        </div>
+        <div class="story-list idle-story-list">
+          ${list.map((item) => `
+            <article class="story-list-card idle-story-card">
+              <div class="story-list-image fallback"></div>
+              <div class="story-list-content">
+                <div class="story-list-meta"><span>Preview</span></div>
+                <div class="story-list-title">${escapeHtml(item.title)}</div>
+                <p class="story-list-summary">${escapeHtml(item.summary)}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    </section>
+  `;
 }
 
 function renderError(message) {
