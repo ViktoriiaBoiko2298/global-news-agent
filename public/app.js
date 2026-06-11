@@ -21,7 +21,8 @@ const state = {
   pushSupported: false,
   serviceWorkerRegistration: null,
   pushPublicKey: "",
-  pushSubscription: null
+  pushSubscription: null,
+  mediaHydrationToken: 0
 };
 
 const elements = {
@@ -1109,18 +1110,18 @@ function renderResults(data) {
   }
   elements.activeLabel.textContent = localizedRequestLabel(request);
   elements.lastUpdated.textContent = formatDateTime(data.generatedAt);
-  elements.summaryMode.textContent = data.summary?.mode === "ai" ? ui.results.ai : ui.results.heuristic;
-
   renderBriefing(buildLocalizedBriefing(data, request, clusters));
   renderTags(data.stats?.topTags || []);
 
   if (!clusters.length) {
+    state.mediaHydrationToken = Date.now();
     elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(ui.results.empty)}</div>`;
     return;
   }
 
   elements.resultsList.innerHTML = renderEditorialBoard(clusters);
   bindResultActions();
+  void hydrateVisibleStoryMedia(clusters);
 }
 
 function renderEditorialBoard(clusters) {
@@ -1133,7 +1134,7 @@ function renderEditorialBoard(clusters) {
   return `
     <section class="editorial-board">
       <div class="editorial-stage">
-        ${renderEditorialHero(lead)}
+        ${renderEditorialHero(lead, 1)}
         <aside class="editorial-side-list">
           <div class="stream-section-head">
             <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
@@ -1148,30 +1149,150 @@ function renderEditorialBoard(clusters) {
           <h3>${escapeHtml(currentUi().results.topStories)}</h3>
         </div>
         <div class="editorial-feed-list">
-          ${feed.map(renderEditorialFeedCard).join("")}
+          ${feed.map((cluster, index) => renderEditorialFeedCard(cluster, index + 5)).join("")}
         </div>
       </section>
     </section>
   `;
 }
 
-function renderEditorialHero(cluster) {
+function renderStoryTextPanel(article, variant = "hero") {
+  const tags = selectCardTags(article.tags || []);
+  const primaryTag = translateTag(tags[0] || currentUi().results.topStories);
+  const secondaryTag = article.domain || article.provider || "Source";
+  const timeLabel = relativeTimeFromNow(article.publishedAt);
+  const summary = excerptText(article.summary || article.title, variant === "hero" ? 92 : variant === "side" ? 54 : 62);
+  const titleLines = splitHeadlineForPanel(article.title || "", variant === "hero" ? 3 : 2);
+  const panelClass =
+    variant === "hero" ? "editorial-hero-media" : variant === "side" ? "editorial-side-media" : "editorial-feed-media";
+  const toneClass = getStoryPanelToneClass(tags);
+  const accentWord = getStoryPanelAccent(tags, article.domain || article.provider || "");
+  const markerValue = getStoryPanelMarker(article, tags);
+
+  return `
+    <div class="${panelClass} ${toneClass}">
+      <div class="editorial-media-shell">
+        <div class="editorial-media-topline">
+          <span>${escapeHtml(primaryTag)}</span>
+          <span>${escapeHtml(timeLabel)}</span>
+        </div>
+        <div class="editorial-media-accent" aria-hidden="true">
+          <span class="editorial-media-accent-word">${escapeHtml(accentWord)}</span>
+          <span class="editorial-media-accent-value">${escapeHtml(markerValue)}</span>
+        </div>
+        <div class="editorial-media-title-stack">
+          ${titleLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}
+        </div>
+        <p class="editorial-media-summary">${escapeHtml(summary)}</p>
+        <div class="editorial-media-bottomline">
+          <span>${escapeHtml(secondaryTag)}</span>
+          <span class="editorial-media-mark"></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function splitHeadlineForPanel(title, maxLines = 3) {
+  const words = String(title || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return ["News Agent"];
+
+  const lines = [];
+  const targetLength = maxLines === 3 ? 18 : 14;
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > targetLength && lines.length < maxLines - 1) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines.slice(0, maxLines);
+}
+
+function getStoryPanelToneClass(tags) {
+  const values = new Set((tags || []).map((tag) => String(tag || "").toLowerCase()));
+  if (values.has("политика") || values.has("геополитика")) return "tone-politics";
+  if (values.has("экономика") || values.has("рынки") || values.has("макро")) return "tone-macro";
+  if (values.has("акции")) return "tone-equities";
+  if (values.has("крипта")) return "tone-crypto";
+  if (values.has("сырье")) return "tone-metals";
+  if (values.has("технологии") || values.has("наука")) return "tone-tech";
+  return "tone-neutral";
+}
+
+function getStoryPanelAccent(tags, source = "") {
+  const values = new Set((tags || []).map((tag) => String(tag || "").toLowerCase()));
+  if (values.has("политика")) return state.locale === "ru" ? "policy" : state.locale === "uk" ? "policy" : "policy";
+  if (values.has("геополитика")) return "global";
+  if (values.has("экономика") || values.has("макро")) return "macro";
+  if (values.has("рынки")) return "market";
+  if (values.has("акции")) return "equity";
+  if (values.has("крипта")) return "crypto";
+  if (values.has("сырье")) return "metal";
+  if (values.has("технологии")) return "signal";
+  return abbreviateSource(source) || "brief";
+}
+
+function getStoryPanelMarker(article, tags) {
+  const values = new Set((tags || []).map((tag) => String(tag || "").toLowerCase()));
+  if (values.has("политика") || values.has("геополитика")) return "01";
+  if (values.has("экономика") || values.has("макро")) return "02";
+  if (values.has("акции")) return "03";
+  if (values.has("крипта")) return "04";
+  if (values.has("сырье")) return "05";
+  return formatPanelTime(article.publishedAt);
+}
+
+function abbreviateSource(source) {
+  const words = String(source || "")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!words.length) return "";
+  return words.map((word) => word[0]).join("").toUpperCase();
+}
+
+function formatPanelTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "24H";
+  return String(date.getHours()).padStart(2, "0");
+}
+
+function renderEditorialHero(cluster, order = 1) {
   const article = cluster.lead;
+  const articleKey = articleDomKey(article.url);
+  const articleUrl = article.finalUrl || article.url;
   const tags = selectCardTags(article.tags || []).slice(0, 2)
     .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
     .join("");
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
   const summary = excerptText(article.summary || article.title, 188);
   const meta = [article.domain || article.provider || "Source", article.language || "", formatDateTime(article.publishedAt)].filter(Boolean).join("  •  ");
+  const leadLabel = state.locale === "ru" ? "Lead signal" : state.locale === "uk" ? "Lead signal" : "Lead signal";
+  const delay = `${order * 45}ms`;
 
   return `
-    <article class="editorial-hero">
+    <article class="editorial-hero" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
       <div class="editorial-hero-copy">
-        <div class="editorial-hero-meta">
-          <span class="editorial-kicker">${escapeHtml(currentUi().results.topStories)}</span>
-          ${clusterBadge}
+        <div class="editorial-hero-header">
+          <div class="editorial-hero-meta">
+            <span class="editorial-kicker">${escapeHtml(currentUi().results.topStories)}</span>
+            ${clusterBadge}
+          </div>
+          <div class="editorial-hero-signalbar">
+            <span class="editorial-signal-pill">${escapeHtml(leadLabel)}</span>
+            <span class="editorial-hero-slash"></span>
+            <span class="editorial-hero-time">${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
+          </div>
         </div>
-        <a class="editorial-hero-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <a class="editorial-hero-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
         <p class="editorial-hero-summary">${escapeHtml(summary)}</p>
         ${tags ? `<div class="editorial-tags">${tags}</div>` : ""}
         <div class="editorial-hero-footer">
@@ -1182,7 +1303,7 @@ function renderEditorialHero(cluster) {
             aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
             data-share-article='${escapeAttribute(JSON.stringify({
               title: article.title,
-              url: article.url,
+              url: articleUrl,
               provider: article.provider || article.domain || "News Agent"
             }))}'
           >
@@ -1190,21 +1311,24 @@ function renderEditorialHero(cluster) {
           </button>
         </div>
       </div>
-      ${article.image ? `<img class="editorial-hero-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-hero-image fallback"></div>`}
+      ${renderStoryTextPanel(article, "hero")}
     </article>
   `;
 }
 
 function renderEditorialSideItem(cluster, index) {
   const article = cluster.lead;
+  const articleKey = articleDomKey(article.url);
+  const articleUrl = article.finalUrl || article.url;
   const summary = excerptText(article.summary || article.title, 88);
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
+  const delay = `${(index + 1) * 55}ms`;
 
   return `
-    <article class="editorial-side-item${article.image ? "" : " no-image"}">
+    <article class="editorial-side-item" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
       <span class="editorial-side-index">${index}.</span>
       <div class="editorial-side-copy">
-        <a class="editorial-side-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <a class="editorial-side-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
         <p class="editorial-side-summary">${escapeHtml(summary)}</p>
         <div class="editorial-side-meta">
           <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
@@ -1212,37 +1336,40 @@ function renderEditorialSideItem(cluster, index) {
           ${clusterBadge}
         </div>
       </div>
-      ${article.image ? `<img class="editorial-side-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-side-image fallback"></div>`}
+      ${renderStoryTextPanel(article, "side")}
     </article>
   `;
 }
 
-function renderEditorialFeedCard(cluster) {
+function renderEditorialFeedCard(cluster, order = 5) {
   const article = cluster.lead;
+  const articleKey = articleDomKey(article.url);
+  const articleUrl = article.finalUrl || article.url;
   const tags = selectCardTags(article.tags || []).slice(0, 2)
     .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
     .join("");
   const summary = excerptText(article.summary || article.title, 120);
+  const delay = `${order * 38}ms`;
 
   return `
-    <article class="editorial-feed-card${article.image ? "" : " no-image"}">
+    <article class="editorial-feed-card" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
       <div class="editorial-feed-copy">
         <div class="editorial-feed-meta">
           <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
           <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
         </div>
-        <a class="editorial-feed-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <a class="editorial-feed-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
         <p class="editorial-feed-summary">${escapeHtml(summary)}</p>
         ${tags ? `<div class="editorial-tags editorial-tags-inline">${tags}</div>` : ""}
       </div>
-      ${article.image ? `<img class="editorial-feed-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-feed-image fallback"></div>`}
+      ${renderStoryTextPanel(article, "feed")}
       <button
         class="icon-button editorial-share-button"
         type="button"
         aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
         data-share-article='${escapeAttribute(JSON.stringify({
           title: article.title,
-          url: article.url,
+          url: articleUrl,
           provider: article.provider || article.domain || "News Agent"
         }))}'
       >
@@ -1253,9 +1380,83 @@ function renderEditorialFeedCard(cluster) {
 }
 
 function renderBriefing(lines) {
+  if (!elements.briefingLines) return;
   elements.briefingLines.innerHTML = lines.length
     ? lines.slice(0, 2).map((line) => `<p>${escapeHtml(line)}</p>`).join("")
     : `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
+}
+
+function articleDomKey(url) {
+  return encodeURIComponent(String(url || ""));
+}
+
+function isGoogleNewsUrl(url) {
+  return /^https?:\/\/news\.google\.com\//i.test(String(url || ""));
+}
+
+function isGenericGooglePreview(url) {
+  return /googleusercontent\.com/i.test(String(url || ""));
+}
+
+function shouldHydrateArticlePreview(article) {
+  if (!article?.url) return false;
+  return isGoogleNewsUrl(article.url) || !article.image || isGenericGooglePreview(article.image);
+}
+
+async function hydrateVisibleStoryMedia(clusters) {
+  const candidates = clusters
+    .slice(0, 6)
+    .map((cluster) => cluster.lead)
+    .filter((article) => shouldHydrateArticlePreview(article));
+
+  if (!candidates.length) return;
+
+  const token = Date.now();
+  state.mediaHydrationToken = token;
+
+  for (const article of candidates) {
+    if (state.mediaHydrationToken !== token) return;
+
+    try {
+      const params = new URLSearchParams({
+        url: article.url || "",
+        image: article.image || "",
+        finalUrl: article.finalUrl || ""
+      });
+      const preview = await api(`/api/article-preview?${params.toString()}`);
+      if (state.mediaHydrationToken !== token) return;
+
+      article.finalUrl = preview.finalUrl || article.finalUrl || article.url;
+      article.image = preview.image || article.image || "";
+      applyArticlePreview(article.url, article);
+    } catch {
+      // Keep the initial preview if the source blocks or rate-limits enrichment.
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+  }
+}
+
+function applyArticlePreview(originalUrl, article) {
+  const node = elements.resultsList.querySelector(`[data-article-key="${articleDomKey(originalUrl)}"]`);
+  if (!node) return;
+
+  const finalUrl = article.finalUrl || article.url || originalUrl;
+  node.querySelectorAll("[data-article-link]").forEach((link) => {
+    link.setAttribute("href", finalUrl);
+  });
+
+  const shareButton = node.querySelector("[data-share-article]");
+  if (shareButton) {
+    shareButton.setAttribute(
+      "data-share-article",
+      JSON.stringify({
+        title: article.title || "News story",
+        url: finalUrl,
+        provider: article.provider || article.domain || "News Agent"
+      })
+    );
+  }
 }
 
 function relativeTimeFromNow(value) {
@@ -1350,17 +1551,21 @@ function selectCardTags(tags) {
 }
 
 function renderLoading() {
+  state.mediaHydrationToken = Date.now();
   elements.message.textContent = "";
   elements.message.hidden = true;
   if (elements.totalCount) elements.totalCount.textContent = "—";
   if (elements.sourceName) elements.sourceName.textContent = sourceLabel(elements.sourceSelect.value);
   if (elements.sortName) elements.sortName.textContent = localizedMap("sortModes")[elements.sortModeSelect.value] || localizedMap("sortModes").relevance;
   if (elements.matchName) elements.matchName.textContent = localizedMap("matchModes")[elements.matchModeSelect.value] || localizedMap("matchModes").balanced;
-  elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.loading)}</p>`;
+  if (elements.briefingLines) {
+    elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.loading)}</p>`;
+  }
   elements.resultsList.innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton"></div>').join("");
 }
 
 function renderIdleState(message = "") {
+  state.mediaHydrationToken = Date.now();
   state.currentPayload = null;
   state.lastRequest = null;
   elements.message.textContent = "";
@@ -1372,12 +1577,13 @@ function renderIdleState(message = "") {
   elements.activeMode.textContent = currentUi().results.activeModes[state.mode] || currentUi().results.activeModes.world;
   elements.activeLabel.textContent = currentUi().results.idleLabel;
   elements.lastUpdated.textContent = "-";
-  elements.summaryMode.textContent = "";
   if (elements.totalCount) elements.totalCount.textContent = "0";
   if (elements.sourceName) elements.sourceName.textContent = sourceLabel(elements.sourceSelect.value);
   if (elements.sortName) elements.sortName.textContent = localizedMap("sortModes")[elements.sortModeSelect.value] || localizedMap("sortModes").relevance;
   if (elements.matchName) elements.matchName.textContent = localizedMap("matchModes")[elements.matchModeSelect.value] || localizedMap("matchModes").balanced;
-  elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
+  if (elements.briefingLines) {
+    elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
+  }
   elements.resultsList.innerHTML = renderIdlePreview();
 }
 
@@ -1432,7 +1638,7 @@ function renderIdlePreview() {
               <p class="editorial-hero-summary">${escapeHtml(lead.summary)}</p>
               <div class="editorial-tags">${lead.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
             </div>
-            <div class="editorial-hero-image fallback"></div>
+            ${renderStoryTextPanel(lead, "hero")}
           </article>
           <aside class="editorial-side-list">
             <div class="stream-section-head">
@@ -1440,13 +1646,13 @@ function renderIdlePreview() {
             </div>
             <div class="editorial-side-items">
               ${side.map((item, index) => `
-                <article class="editorial-side-item no-image idle-side-item">
+                <article class="editorial-side-item idle-side-item">
                   <span class="editorial-side-index">${index + 1}.</span>
                   <div class="editorial-side-copy">
                     <div class="editorial-side-title">${escapeHtml(item.title)}</div>
                     <p class="editorial-side-summary">${escapeHtml(item.summary)}</p>
                   </div>
-                  <div class="editorial-side-image fallback"></div>
+                  ${renderStoryTextPanel(item, "side")}
                 </article>
               `).join("")}
             </div>
@@ -1459,13 +1665,13 @@ function renderIdlePreview() {
         </div>
         <div class="editorial-feed-list">
           ${list.map((item) => `
-            <article class="editorial-feed-card no-image idle-feed-card">
+            <article class="editorial-feed-card idle-feed-card">
               <div class="editorial-feed-copy">
                 <div class="editorial-feed-meta"><span>Preview</span></div>
                 <div class="editorial-feed-title">${escapeHtml(item.title)}</div>
                 <p class="editorial-feed-summary">${escapeHtml(item.summary)}</p>
               </div>
-              <div class="editorial-feed-image fallback"></div>
+              ${renderStoryTextPanel(item, "feed")}
             </article>
           `).join("")}
         </div>

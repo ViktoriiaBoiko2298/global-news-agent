@@ -21,7 +21,6 @@
     <div class="shell">
       <header class="topbar">
         <div class="brand-block">
-          <p class="eyebrow">Signal desk</p>
           <h1>News Agent</h1>
         </div>
         <div class="status-stack">
@@ -33,12 +32,6 @@
           <div class="status-pill" id="connectionStatus">
             <span class="dot"></span>
             <span>ready</span>
-          </div>
-          <div class="signal-ribbon" aria-hidden="true">
-            <span>Politics</span>
-            <span>Macro</span>
-            <span>Equities</span>
-            <span>Metals</span>
           </div>
         </div>
       </header>
@@ -186,28 +179,30 @@
             </details>
           </form>
 
-          <div class="quick-actions">
-            <button class="ghost small-action" id="shareSearchButton" type="button">
-              <i data-lucide="share-2"></i>
-              <span>Share</span>
-            </button>
-            <button class="ghost small-action" id="createAlertButton" type="button">
-              <i data-lucide="bell-plus"></i>
-              <span>Alert</span>
-            </button>
-          </div>
+          <div class="control-footer">
+            <div class="quick-actions">
+              <button class="ghost small-action" id="shareSearchButton" type="button">
+                <i data-lucide="share-2"></i>
+                <span>Share</span>
+              </button>
+              <button class="ghost small-action" id="createAlertButton" type="button">
+                <i data-lucide="bell-plus"></i>
+                <span>Alert</span>
+              </button>
+            </div>
 
-          <div class="automation-row">
-            <label class="switch">
-              <input id="autoRefreshToggle" type="checkbox" checked />
-              <span></span>
-              <span class="switch-label">Auto-refresh</span>
-            </label>
-            <select id="refreshInterval">
-              <option value="300000">5 min</option>
-              <option value="900000" selected>15 min</option>
-              <option value="1800000">30 min</option>
-            </select>
+            <div class="automation-row">
+              <label class="switch">
+                <input id="autoRefreshToggle" type="checkbox" checked />
+                <span></span>
+                <span class="switch-label">Auto-refresh</span>
+              </label>
+              <select id="refreshInterval">
+                <option value="300000">5 min</option>
+                <option value="900000" selected>15 min</option>
+                <option value="1800000">30 min</option>
+              </select>
+            </div>
           </div>
         </section>
 
@@ -301,13 +296,6 @@
               <strong id="matchName">Balanced</strong>
             </div>
           </div>
-          <section class="briefing-panel" id="briefingPanel">
-            <div class="panel-heading">
-              <h2>Briefing</h2>
-              <span class="panel-code" id="summaryMode">Heuristic</span>
-            </div>
-            <div class="briefing-lines" id="briefingLines"></div>
-          </section>
           <div class="message" id="message" hidden></div>
           <div class="results-list" id="resultsList"></div>
         </section>
@@ -328,19 +316,19 @@
         <p class="share-caption" id="shareCaption">Share the current page.</p>
         <div class="share-grid">
           <button class="share-tile" type="button" data-share-target="x">
-            <i data-lucide="twitter"></i>
+            <i data-lucide="send"></i>
             <span>X</span>
           </button>
           <button class="share-tile" type="button" data-share-target="facebook">
-            <i data-lucide="facebook"></i>
+            <i data-lucide="users"></i>
             <span>Facebook</span>
           </button>
           <button class="share-tile" type="button" data-share-target="linkedin">
-            <i data-lucide="linkedin"></i>
+            <i data-lucide="briefcase-business"></i>
             <span>LinkedIn</span>
           </button>
           <button class="share-tile" type="button" data-share-target="instagram">
-            <i data-lucide="instagram"></i>
+            <i data-lucide="camera"></i>
             <span>Instagram</span>
           </button>
           <button class="share-tile" type="button" data-share-target="native">

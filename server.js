@@ -14,6 +14,7 @@ const GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc";
 const GOOGLE_NEWS_RSS = "https://news.google.com/rss/search";
 const GOOGLE_TOP_RSS = "https://news.google.com/rss";
 const GOOGLE_TOPIC_RSS = "https://news.google.com/rss/headlines/section/topic";
+const GOOGLE_NEWS_BATCH_URL = "https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je";
 const DATA_DIR = path.resolve(process.env.NEWS_AGENT_DATA_DIR || path.join(__dirname, "data"));
 const WATCHLIST_FILE = path.join(DATA_DIR, "watchlist.json");
 const SEARCH_HISTORY_FILE = path.join(DATA_DIR, "search-history.json");
@@ -23,13 +24,20 @@ const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push-subscriptions.json");
 const VAPID_KEYS_FILE = path.join(DATA_DIR, "vapid-keys.json");
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_IMAGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const ARTICLE_CONTENT_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
 const GDELT_DELAY_MS = 5500;
 const ALERT_MONITOR_TICK_MS = 60 * 1000;
+const VISIBLE_STORY_MEDIA_LIMIT = 12;
+const REQUEST_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+const EMPTY_IMAGE_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const cache = new Map();
 const tickerCache = new Map();
 const articleImageCache = new Map();
+const articleContentCache = new Map();
 const articleAvailabilityCache = new Map();
+const googleNewsUrlCache = new Map();
 let gdeltQueue = Promise.resolve();
 let gdeltNextAt = 0;
 let alertMonitorRunning = false;
@@ -277,6 +285,16 @@ const personalFinanceTerms = [
   "hysa", "paycheck", "college", "tuition"
 ];
 
+const customQueryFocusLexicon = {
+  politics: ["politics", "political", "election", "government", "diplomacy", "sanctions", "parliament"],
+  markets: ["market", "markets", "macro", "economy", "inflation", "rates", "fed", "ecb", "central bank"],
+  stocks: ["stock", "stocks", "stock market", "equities", "shares", "earnings", "nasdaq", "nyse", "s&p"],
+  crypto: ["crypto", "bitcoin", "ethereum", "solana", "stablecoin", "blockchain", "btc", "eth"],
+  commodities: ["gold", "silver", "copper", "oil", "gas", "wheat", "uranium", "lithium", "commodities", "metal"],
+  tech: ["technology", "tech", "ai", "chips", "software", "cybersecurity", "semiconductor"],
+  science: ["science", "health", "medicine", "research", "vaccine"]
+};
+
 const companyNoiseWords = new Set([
   "inc", "inc.", "corp", "corp.", "corporation", "company", "co", "co.", "group", "holdings",
   "holding", "ltd", "ltd.", "limited", "plc", "llc", "sa", "ag", "nv", "the", "and", "class",
@@ -475,6 +493,43 @@ app.get("/api/news", async (req, res) => {
   }
 });
 
+app.get("/api/article-preview", async (req, res) => {
+  try {
+    const url = cleanText(req.query.url || "");
+    const image = cleanText(req.query.image || "");
+
+    if (!/^https?:\/\//i.test(url)) {
+      res.status(400).json({ error: "Некорректный URL статьи." });
+      return;
+    }
+
+    const article = {
+      url,
+      image,
+      finalUrl: cleanText(req.query.finalUrl || "")
+    };
+
+    const targetUrl = await resolveArticleTargetUrl(article);
+    if (targetUrl) {
+      article.finalUrl = targetUrl;
+      if (isGoogleNewsArticleUrl(article.url)) article.url = targetUrl;
+    }
+
+    const resolvedImage = await resolveArticleImage(article.url, article.image);
+    if (resolvedImage) article.image = resolvedImage;
+
+    res.json({
+      url,
+      finalUrl: article.finalUrl || article.url || url,
+      image: article.image || image || ""
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: error.message || "Не удалось обновить статью."
+    });
+  }
+});
+
 app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -616,8 +671,10 @@ async function fetchNews(request) {
     throw new Error(errors.length ? errors.join("; ") : "Новости отсутствуют.");
   }
 
-  await enrichArticleImages(processed);
   const clusters = buildStoryClusters(processed).slice(0, request.limit);
+  if (!shouldHydrateStoryMediaAsync(request)) {
+    await enrichClusterLeadMedia(clusters);
+  }
   const requestInfo = buildRequestInfo(request, collected.some((article) => article.resolvedSource === "auto") ? "auto" : inferPrimarySource(clusters));
 
   return {
@@ -854,7 +911,7 @@ async function fetchRssFeed(feed) {
 function getRssFeedsForRequest(request, sourceMode) {
   const selectedSources =
     sourceMode === "feeds"
-      ? ["stocktitan", "yahoo", "investing", "benzinga", "cnbc", "marketwatch", "nytimes", "npr", "fox"]
+      ? getAutoFeedSourceSet(request)
       : [sourceMode];
   const feeds = [];
   const add = (source, label, url, topic = "") => {
@@ -908,9 +965,32 @@ function getRssFeedsForRequest(request, sourceMode) {
   return feeds;
 }
 
+function getAutoFeedSourceSet(request) {
+  if (isMarketDrivenRequest(request)) {
+    return ["stocktitan", "yahoo", "investing", "benzinga", "cnbc", "marketwatch"];
+  }
+  return ["stocktitan", "yahoo", "investing", "benzinga", "cnbc", "marketwatch", "nytimes", "npr", "fox"];
+}
+
+function isMarketDrivenRequest(request) {
+  const focus = getEffectiveFocus(request);
+  return (
+    request.mode === "ticker" ||
+    request.mode === "commodity" ||
+    request.category === "stocks" ||
+    request.category === "crypto" ||
+    focus === "markets" ||
+    focus === "stocks" ||
+    focus === "crypto" ||
+    focus === "commodities" ||
+    focus === "companies"
+  );
+}
+
 function articleMatchesRequest(article, request) {
   const tags = new Set(article.tags || []);
   const filters = request.filters || {};
+  const focus = getEffectiveFocus(request);
   const score = scoreArticleForRequest(article, request);
 
   if (filters.language !== "any" && !languageMatches(article, filters.language)) return false;
@@ -927,7 +1007,7 @@ function articleMatchesRequest(article, request) {
     if (request.category === "technology" && !(tags.has("технологии") || tags.has("наука"))) return false;
   }
 
-  if (filters.focus !== "all" && !articleMatchesFocus(article, filters.focus)) return false;
+  if (focus !== "all" && !articleMatchesFocus(article, focus)) return false;
 
   if (request.mode === "custom") {
     if (!articleHasCustomMatch(article, request)) return false;
@@ -942,6 +1022,12 @@ function articleMatchesRequest(article, request) {
     return score >= minScoreForRequest(request, "commodity");
   }
   return true;
+}
+
+function getEffectiveFocus(request) {
+  const explicit = request?.filters?.focus || "all";
+  if (explicit !== "all") return explicit;
+  return request?.parsedQuery?.focus || "all";
 }
 
 function getRequestTerms(request) {
@@ -965,6 +1051,19 @@ function getRequestTerms(request) {
   }
 
   return [];
+}
+
+function getArticleSearchText(article, options = {}) {
+  const parts = [
+    article.title || "",
+    article.summary || "",
+    article.fullText || "",
+    article.sourceCountry || "",
+    article.domain || "",
+    article.provider || ""
+  ];
+  if (options.includeUrl) parts.push(article.url || "", article.finalUrl || "");
+  return parts.join(" ").toLowerCase();
 }
 
 function compactTerms(terms) {
@@ -1014,15 +1113,58 @@ function sortArticlesForRequest(articles, request) {
   return deduped.sort(comparator);
 }
 
+async function enrichArticlesForRelevance(articles, request) {
+  if (!needsDeepArticleParsing(request) || !articles.length) return;
+
+  const limit = Math.min(articles.length, Math.max(request.limit, 10));
+  await runWithConcurrency(articles.slice(0, limit), 4, async (article) => {
+    const content = await resolveArticleContent(article.url);
+    if (!content) return;
+    if (content.summary && (!article.summary || article.summary.length < 80)) {
+      article.summary = content.summary;
+    }
+    article.fullText = content.text || "";
+    article.finalUrl = content.finalUrl || article.url;
+  });
+}
+
+function needsDeepArticleParsing(request) {
+  if (!request) return false;
+  if (request.mode === "ticker" || request.mode === "commodity" || request.mode === "custom") return true;
+  if (request.filters?.country) return true;
+  if (request.category === "stocks" || request.category === "crypto" || request.category === "technology") return true;
+  return false;
+}
+
 async function enrichArticleImages(articles) {
-  await runWithConcurrency(
-    articles.filter((article) => shouldRefreshArticleImage(article)),
-    4,
-    async (article) => {
+  const targets = articles.filter((article) => shouldRefreshArticleImage(article));
+  const googleTargets = targets.filter((article) => isGoogleNewsArticleUrl(article.url)).slice(0, 6);
+  const regularTargets = targets.filter((article) => !isGoogleNewsArticleUrl(article.url));
+
+  const enrichOne = async (article) => {
+      const isGoogle = isGoogleNewsArticleUrl(article.url);
+      const targetUrl = await resolveArticleTargetUrl(article);
+      if (targetUrl) {
+        article.finalUrl = targetUrl;
+        if (isGoogleNewsArticleUrl(article.url)) article.url = targetUrl;
+      }
       const resolved = await resolveArticleImage(article.url, article.image);
       if (resolved) article.image = resolved;
-    }
-  );
+      if (isGoogle) await sleep(250);
+  };
+
+  await runWithConcurrency(googleTargets, 1, enrichOne);
+  await runWithConcurrency(regularTargets, 4, enrichOne);
+}
+
+async function enrichClusterLeadMedia(clusters) {
+  const leads = clusters.slice(0, VISIBLE_STORY_MEDIA_LIMIT).map((cluster) => cluster.lead).filter(Boolean);
+  if (!leads.length) return;
+  await enrichArticleImages(leads);
+}
+
+function shouldHydrateStoryMediaAsync(request) {
+  return request?.source === "google" || request?.source === "auto";
 }
 
 function shouldRefreshArticleImage(article) {
@@ -1032,22 +1174,60 @@ function shouldRefreshArticleImage(article) {
 }
 
 async function resolveArticleImage(url, fallbackImage = "") {
-  const key = String(url || "").split("#")[0];
+  const targetUrl = await resolveGoogleNewsArticleUrl(url);
+  const key = String(targetUrl || url || "").split("#")[0];
   if (!key) return fallbackImage || "";
 
   const cached = articleImageCache.get(key);
-  if (cached && Date.now() - cached.createdAt < ARTICLE_IMAGE_CACHE_TTL_MS) {
+  const cacheTtl = cached?.value ? ARTICLE_IMAGE_CACHE_TTL_MS : EMPTY_IMAGE_CACHE_TTL_MS;
+  if (cached && Date.now() - cached.createdAt < cacheTtl) {
     return cached.value || fallbackImage || "";
   }
 
   try {
     const { html, finalUrl } = await fetchHtml(key, 7000);
     const image = extractPagePreviewImage(html, finalUrl || key) || fallbackImage || "";
-    articleImageCache.set(key, { createdAt: Date.now(), value: image });
+    if (image) {
+      articleImageCache.set(key, { createdAt: Date.now(), value: image });
+    } else {
+      articleImageCache.delete(key);
+    }
     return image;
   } catch {
-    articleImageCache.set(key, { createdAt: Date.now(), value: fallbackImage || "" });
-    return fallbackImage || "";
+    if (fallbackImage) {
+      articleImageCache.set(key, { createdAt: Date.now(), value: fallbackImage });
+      return fallbackImage;
+    }
+    articleImageCache.delete(key);
+    return "";
+  }
+}
+
+async function resolveArticleContent(url) {
+  const targetUrl = await resolveGoogleNewsArticleUrl(url);
+  const key = String(targetUrl || url || "").split("#")[0];
+  if (!key) return null;
+
+  const cached = articleContentCache.get(key);
+  if (cached && Date.now() - cached.createdAt < ARTICLE_CONTENT_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  try {
+    const { html, finalUrl } = await fetchHtml(key, 7000);
+    const summary = extractMetaDescription(html);
+    const text = extractPageText(html);
+    const value = {
+      finalUrl: finalUrl || key,
+      summary,
+      text
+    };
+    articleContentCache.set(key, { createdAt: Date.now(), value });
+    return value;
+  } catch {
+    const value = null;
+    articleContentCache.set(key, { createdAt: Date.now(), value });
+    return value;
   }
 }
 
@@ -1082,6 +1262,7 @@ async function filterUnavailableArticles(articles) {
 async function isUnavailableArticleUrl(url) {
   const key = String(url || "").split("#")[0];
   if (!key) return false;
+  if (key.includes("news.google.com/rss/articles/")) return false;
 
   const cached = articleAvailabilityCache.get(key);
   if (cached && Date.now() - cached.createdAt < ARTICLE_IMAGE_CACHE_TTL_MS) {
@@ -1107,6 +1288,157 @@ function compareArticlesByRelevance(a, b) {
     return (b.sourceQuality?.quality || 0) - (a.sourceQuality?.quality || 0);
   }
   return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+}
+
+async function resolveArticleTargetUrl(article) {
+  if (!article?.url) return "";
+  const resolved = await resolveGoogleNewsArticleUrl(article.finalUrl || article.url);
+  return resolved || article.finalUrl || article.url;
+}
+
+async function resolveGoogleNewsArticleUrl(sourceUrl) {
+  const key = String(sourceUrl || "").split("#")[0];
+  if (!key || !isGoogleNewsArticleUrl(key)) return key;
+
+  const cached = googleNewsUrlCache.get(key);
+  if (cached && Date.now() - cached.createdAt < ARTICLE_CONTENT_CACHE_TTL_MS) {
+    return cached.value || key;
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const direct = decodeGoogleNewsUrlDirectly(key);
+      if (direct && /^https?:\/\//i.test(direct)) {
+        googleNewsUrlCache.set(key, { createdAt: Date.now(), value: direct });
+        return direct;
+      }
+
+      const params = await fetchGoogleNewsDecodeParams(key);
+      const decoded = await requestGoogleNewsDecodedUrl(params);
+      if (decoded) {
+        googleNewsUrlCache.set(key, { createdAt: Date.now(), value: decoded });
+        return decoded;
+      }
+    } catch {
+      if (attempt === 0) {
+        await sleep(450);
+        continue;
+      }
+    }
+  }
+
+  return key;
+}
+
+function isGoogleNewsArticleUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.hostname === "news.google.com" && /\/(?:rss\/)?articles\//i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function extractGoogleNewsArticleId(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  } catch {
+    return "";
+  }
+}
+
+function decodeGoogleNewsUrlDirectly(sourceUrl) {
+  const articleId = extractGoogleNewsArticleId(sourceUrl);
+  if (!articleId) return "";
+
+  try {
+    let decoded = Buffer.from(articleId, "base64url").toString("latin1");
+    const prefix = Buffer.from([0x08, 0x13, 0x22]).toString("latin1");
+    const suffix = Buffer.from([0xd2, 0x01, 0x00]).toString("latin1");
+
+    if (decoded.startsWith(prefix)) decoded = decoded.slice(prefix.length);
+    if (decoded.endsWith(suffix)) decoded = decoded.slice(0, -suffix.length);
+
+    const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+    const firstByte = bytes[0];
+    if (!firstByte) return "";
+
+    if (firstByte >= 0x80 && bytes.length > 2) {
+      decoded = decoded.slice(2, firstByte + 2);
+    } else {
+      decoded = decoded.slice(1, firstByte + 1);
+    }
+
+    if (/^https?:\/\//i.test(decoded)) return decoded;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+async function fetchGoogleNewsDecodeParams(sourceUrl) {
+  const articleId = extractGoogleNewsArticleId(sourceUrl);
+  if (!articleId) throw new Error("Google News article id not found.");
+
+  const articleUrl = `https://news.google.com/articles/${articleId}?hl=en-US&gl=US&ceid=US:en`;
+  const { html } = await fetchHtml(articleUrl, 7000);
+  const match =
+    html.match(/data-n-a-id="([^"]+)"[^>]*data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"/i) ||
+    html.match(/data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"[^>]*data-n-a-id="([^"]+)"/i);
+
+  if (!match) {
+    throw new Error("Google News decode params not found.");
+  }
+
+  if (match.length === 4 && match[1] && match[2] && match[3] && html.includes(`data-n-a-id="${match[1]}"`)) {
+    return {
+      articleId: match[1],
+      timestamp: match[2],
+      signature: match[3]
+    };
+  }
+
+  return {
+    articleId: match[3],
+    timestamp: match[1],
+    signature: match[2]
+  };
+}
+
+async function requestGoogleNewsDecodedUrl(params) {
+  const payload = [[[
+    "Fbv4je",
+    `[\"garturlreq\",[[\"X\",\"X\",[\"X\",\"X\"],null,null,1,1,\"US:en\",null,1,null,null,null,null,null,0,1],\"X\",\"X\",1,[1,1,1],1,1,null,0,0,null,0],\"${params.articleId}\",${params.timestamp},\"${params.signature}\"]`
+  ]]];
+
+  const body = new URLSearchParams({
+    "f.req": JSON.stringify(payload)
+  }).toString();
+
+  const response = await fetch(GOOGLE_NEWS_BATCH_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "user-agent": REQUEST_USER_AGENT,
+      accept: "*/*",
+      "accept-language": "en-US,en;q=0.9",
+      referer: "https://news.google.com/"
+    },
+    body
+  });
+
+  const text = await response.text();
+  const batchPayload = text.split("\n\n")[1];
+  if (!batchPayload) return "";
+
+  const rows = JSON.parse(batchPayload);
+  const target = rows.find((row) => row?.[0] === "wrb.fr" && row?.[1] === "Fbv4je");
+  if (!target?.[2]) return "";
+
+  const decoded = JSON.parse(target[2]);
+  return cleanText(decoded?.[1] || "");
 }
 
 function compareArticlesByNewest(a, b) {
@@ -1137,11 +1469,12 @@ function finalizeArticlesForRequest(articles, request) {
 }
 
 function scoreArticleForRequest(article, request) {
-  const text = `${article.title} ${article.summary || ""} ${article.domain || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
   const title = String(article.title || "").toLowerCase();
   const quality = inferSourceQuality(article).quality;
   const requestCountry = request.filters?.country || request.parsedQuery?.country || "";
   const countryStrength = requestCountry ? countryMentionStrength(article, requestCountry) : 0;
+  const focus = getEffectiveFocus(request);
   let score = Math.round(quality / 25);
 
   for (const term of getRequestTerms(request)) {
@@ -1176,7 +1509,7 @@ function scoreArticleForRequest(article, request) {
     if ((article.tags || []).includes("культура")) score -= 4;
   }
 
-  if (request.filters?.focus !== "all" && articleMatchesFocus(article, request.filters.focus)) score += 4;
+  if (focus !== "all" && articleMatchesFocus(article, focus)) score += 4;
   if (request.mode === "ticker") score += tickerMentionStrength(article, request);
   if (request.mode === "commodity") score += commodityMentionStrength(article, request);
   if (request.mode === "custom") score += customTopicStrength(article, request);
@@ -1203,7 +1536,7 @@ function articleMatchesFocus(article, focus) {
 }
 
 function articleHasTickerMatch(article, request) {
-  return tickerMentionStrength(article, request) >= minTickerMentionStrength(request);
+  return articleHasTickerAnchor(article, request) && tickerMentionStrength(article, request) >= minTickerMentionStrength(request);
 }
 
 function articleHasCommodityMatch(article, request) {
@@ -1215,14 +1548,14 @@ function articleHasCustomMatch(article, request) {
     return customTopicStrength(article, request) >= 2;
   }
   if (request.parsedQuery?.country) {
-    return countryMentionStrength(article, request.parsedQuery.country) > 0;
+    return countryMentionStrength(article, request.parsedQuery.country) >= 2;
   }
   return true;
 }
 
 function tickerMentionStrength(article, request) {
   const title = String(article.title || "").toLowerCase();
-  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""} ${article.url || ""}`.toLowerCase();
+  const text = getArticleSearchText(article, { includeUrl: true });
   const symbol = String(request.tickerSymbol || "").toUpperCase();
   const symbolLower = symbol.toLowerCase();
   const company = cleanText(request.company || "").toLowerCase();
@@ -1252,9 +1585,22 @@ function tickerMentionStrength(article, request) {
   return score;
 }
 
+function articleHasTickerAnchor(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const text = getArticleSearchText(article, { includeUrl: true });
+  const symbol = String(request.tickerSymbol || "").toUpperCase();
+  const company = cleanText(request.company || "").toLowerCase();
+  const companyTokens = getCompanyIdentityTerms(request.company || "");
+
+  if (symbol && (matchesTickerSymbol(title, symbol) || matchesTickerSymbol(text, symbol))) return true;
+  if (company && (matchesNewsTerm(title, company) || matchesNewsTerm(text, company))) return true;
+  if (companyTokens.length >= 2 && countDistinctTermMatches(text, companyTokens) >= 2) return true;
+  return false;
+}
+
 function commodityMentionStrength(article, request) {
   const title = String(article.title || "").toLowerCase();
-  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
   let score = 0;
 
   for (const term of request.commodityKeywords || []) {
@@ -1272,7 +1618,7 @@ function customTopicStrength(article, request) {
   if (!terms.length) return 0;
 
   const title = String(article.title || "").toLowerCase();
-  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
   let score = 0;
 
   for (const term of terms) {
@@ -1310,7 +1656,7 @@ function minTickerMentionStrength(request) {
 
 function stockMentionStrength(article) {
   const title = String(article.title || "").toLowerCase();
-  const text = `${article.title || ""} ${article.summary || ""} ${article.domain || ""} ${article.provider || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
   let score = 0;
 
   for (const term of stockMarketTerms) {
@@ -1333,7 +1679,7 @@ function hasStockTitleSignal(article) {
 }
 
 function isPersonalFinanceArticle(article) {
-  const text = `${article.title || ""} ${article.summary || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
   return personalFinanceTerms.some((term) => matchesNewsTerm(text, term));
 }
 
@@ -1370,21 +1716,21 @@ function languageMatches(article, language) {
 }
 
 function articleMatchesCountry(article, country) {
-  return countryMentionStrength(article, country) > 0;
+  return countryMentionStrength(article, country) >= 2;
 }
 
 function countryMentionStrength(article, country) {
   if (!country) return 0;
   const terms = getCountryTerms(country);
   const title = String(article.title || "").toLowerCase();
-  const summary = `${article.summary || ""} ${article.sourceCountry || ""} ${article.domain || ""}`.toLowerCase();
+  const text = getArticleSearchText(article);
+  const titleHits = countDistinctTermMatches(title, terms);
+  const textHits = countDistinctTermMatches(text, terms);
 
-  const titleMatch = terms.some((term) => matchesNewsTerm(title, term));
-  const summaryMatch = terms.some((term) => matchesNewsTerm(summary, term));
-
-  if (titleMatch && summaryMatch) return 4;
-  if (titleMatch) return 3;
-  if (summaryMatch) return 2;
+  if (titleHits > 0 && textHits > 1) return 5;
+  if (titleHits > 0) return 4;
+  if (textHits >= 2) return 3;
+  if (textHits === 1) return 1;
   return 0;
 }
 
@@ -1594,7 +1940,9 @@ async function fetchHtml(url, timeoutMs) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "user-agent": "GlobalNewsAgent/1.0"
+        "user-agent": REQUEST_USER_AGENT,
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.9"
       }
     });
     const text = await response.text();
@@ -2130,6 +2478,7 @@ function parseCustomQuery(rawQuery) {
   const rawTerms = compactTerms(splitSearchTerms(normalized));
   const includeTerms = rawTerms.filter((term) => !["news", "latest", "headlines", "today", "новости", "новость", "сегодня"].includes(term));
   const topicTerms = includeTerms.filter((term) => !termBelongsToCountry(term, country));
+  const focus = detectCustomQueryFocus(normalized, topicTerms);
   if (country && topicTerms.length === 0) {
     excludeTerms.push("sport", "sports", "football", "soccer", "hockey", "basketball");
   }
@@ -2147,8 +2496,25 @@ function parseCustomQuery(rawQuery) {
     excludeTerms,
     includeTerms,
     topicTerms,
+    focus,
     searchQuery
   };
+}
+
+function detectCustomQueryFocus(raw, topicTerms = []) {
+  const text = `${raw} ${topicTerms.join(" ")}`.toLowerCase();
+  let bestFocus = "all";
+  let bestScore = 0;
+
+  for (const [focus, hints] of Object.entries(customQueryFocusLexicon)) {
+    const score = hints.reduce((sum, hint) => sum + (matchesNewsTerm(text, hint) ? 1 : 0), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestFocus = focus;
+    }
+  }
+
+  return bestScore > 0 ? bestFocus : "all";
 }
 
 function termBelongsToCountry(term, country) {
@@ -2386,6 +2752,29 @@ function extractMetaContent(html, pattern) {
   return cleanText(decodeHtml(match?.[1] || ""));
 }
 
+function extractMetaDescription(html) {
+  return (
+    extractMetaContent(html, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i) ||
+    extractMetaContent(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+  );
+}
+
+function extractPageText(html) {
+  if (!html) return "";
+  const source = String(html)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ");
+  const articleChunk =
+    source.match(/<article\b[^>]*>[\s\S]*?<\/article>/i)?.[0] ||
+    source.match(/<main\b[^>]*>[\s\S]*?<\/main>/i)?.[0] ||
+    source.match(/<body\b[^>]*>[\s\S]*?<\/body>/i)?.[0] ||
+    source;
+  return cleanText(stripHtml(articleChunk)).slice(0, 6000);
+}
+
 function extractImageUrlsFromHtml(html, baseUrl = "") {
   const matches = [];
   const source = String(html || "");
@@ -2477,10 +2866,9 @@ function looksLikeHtmlDocument(value) {
 
 function looksLikeUnavailableHtml(value, contentType = "") {
   const text = String(value || "");
-  if (!looksLikeHtmlDocument(text)) return false;
+  if (!looksLikeHtmlDocument(text) && !String(contentType || "").includes("text/html")) return false;
   const lower = text.toLowerCase();
-  return contentType.includes("text/html")
-    || /service suspended|temporarily unavailable|access denied|error 403|error 404|error 500|error 502|error 503|forbidden|unavailable/i.test(lower);
+  return /service suspended|temporarily unavailable|access denied|error 403|error 404|error 500|error 502|error 503|forbidden|unavailable/i.test(lower);
 }
 
 function classifyUnavailableResponse(value) {
