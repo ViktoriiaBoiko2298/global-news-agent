@@ -155,7 +155,7 @@ const I18N = {
         worldCategorySelect: "Choose a topic",
         tickerInput: "NVDA",
         queryInput: "central bank gold buying",
-        countryInput: "Canada",
+        countryInput: "USA",
         excludeInputCustom: "hockey, weather",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -323,7 +323,7 @@ const I18N = {
         worldCategorySelect: "Выбери тему",
         tickerInput: "NVDA",
         queryInput: "покупки золота центробанками",
-        countryInput: "Канада",
+        countryInput: "США",
         excludeInputCustom: "хоккей, погода",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -491,7 +491,7 @@ const I18N = {
         worldCategorySelect: "Оберіть тему",
         tickerInput: "NVDA",
         queryInput: "закупівля золота центробанками",
-        countryInput: "Канада",
+        countryInput: "США",
         excludeInputCustom: "хокей, погода",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -631,9 +631,9 @@ const LOCALE_LABELS = {
     uk: { copper: "Мідь", gold: "Золото", silver: "Срібло", oil: "Нафта", gas: "Газ", wheat: "Пшениця", lithium: "Літій", uranium: "Уран" }
   },
   sources: {
-    en: { auto: "Auto: Google + sites", google: "Google News", feeds: "Popular sites", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News", gdelt: "GDELT" },
-    ru: { auto: "Авто: Google + сайты", google: "Google News", feeds: "Популярные сайты", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News", gdelt: "GDELT" },
-    uk: { auto: "Авто: Google + сайти", google: "Google News", feeds: "Популярні сайти", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News", gdelt: "GDELT" }
+    en: { google: "Google News", feeds: "Popular US sites", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News" },
+    ru: { google: "Google News", feeds: "Популярные сайты США", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News" },
+    uk: { google: "Google News", feeds: "Популярні сайти США", stocktitan: "Stock Titan", yahoo: "Yahoo Finance", investing: "Investing.com", benzinga: "Benzinga", cnbc: "CNBC", marketwatch: "MarketWatch", nytimes: "NYTimes", npr: "NPR", fox: "Fox News" }
   },
   focuses: {
     en: { all: "All topics", politics: "Politics", markets: "Markets", stocks: "Stock market", crypto: "Crypto", companies: "Companies", commodities: "Commodities", tech: "Technology", science: "Science and health" },
@@ -825,7 +825,7 @@ function localizedMap(group) {
 }
 
 function renderPresetOptions() {
-  const selectedSource = elements.sourceSelect.value || "auto";
+  const selectedSource = elements.sourceSelect.value || "google";
   const selectedCategory = elements.worldCategorySelect.value || "";
   const selectedCommodity = elements.commoditySelect.value || "gold";
   const selectedFocus = elements.focusSelect.value || "all";
@@ -850,7 +850,7 @@ function renderPresetOptions() {
   fillSelect(elements.timespanSelect, localizedMap("timespans"));
   fillSelect(elements.refreshInterval, localizedRefreshIntervals());
 
-  elements.sourceSelect.value = selectedSource;
+  elements.sourceSelect.value = localizedMap("sources")[selectedSource] ? selectedSource : "google";
   elements.worldCategorySelect.value = selectedCategory;
   elements.commoditySelect.value = selectedCommodity;
   elements.focusSelect.value = selectedFocus;
@@ -977,7 +977,7 @@ function hydrateFromUrl() {
   const hasRequestParams = ["category", "ticker", "commodity", "query", "country", "focus", "source", "tag"]
     .some((key) => params.has(key));
   state.mode = params.get("mode") || "world";
-  elements.sourceSelect.value = params.get("source") || "auto";
+  elements.sourceSelect.value = params.get("source") || "google";
   elements.timespanSelect.value = params.get("timespan") || "24h";
   elements.limitSelect.value = params.get("limit") || "30";
   elements.worldCategorySelect.value = params.get("category") || "";
@@ -1833,7 +1833,7 @@ function runSavedRequest(item) {
 function applyRequestToForm(request) {
   state.mode = request.mode || "world";
   setMode(state.mode);
-  elements.sourceSelect.value = request.source || "auto";
+  elements.sourceSelect.value = localizedMap("sources")[request.source] ? request.source : "google";
   elements.timespanSelect.value = request.timespan || "24h";
   elements.limitSelect.value = String(request.limit || 30);
   elements.worldCategorySelect.value = request.category || "all";
@@ -2162,7 +2162,11 @@ function selectedWorldCategoryLabel() {
 }
 
 function sourceLabel(source) {
-  return localizedMap("sources")[source] || state.sources[source] || "-";
+  const normalized = source === "auto" ? "google" : source;
+  const base = localizedMap("sources")[normalized] || state.sources[normalized] || "-";
+  const country = elements.countryInput?.value?.trim();
+  if (normalized === "google") return `${base} · ${country || "USA"}`;
+  return base;
 }
 
 function mapTagToFocus(tag) {

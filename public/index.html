@@ -111,9 +111,8 @@
                 <div class="field">
                   <label for="sourceSelect">Source</label>
                   <select id="sourceSelect" name="source">
-                    <option value="auto" selected>Auto</option>
-                    <option value="gdelt">GDELT</option>
-                    <option value="google">Google News</option>
+                    <option value="google" selected>Google News</option>
+                    <option value="feeds">Popular sites</option>
                   </select>
                 </div>
 
@@ -125,6 +124,11 @@
                     <option value="45">45</option>
                     <option value="60">60</option>
                   </select>
+                </div>
+
+                <div class="field">
+                  <label for="countryInput">Country</label>
+                  <input id="countryInput" name="country" autocomplete="off" placeholder="USA" />
                 </div>
               </div>
 
@@ -140,7 +144,7 @@
               </div>
             </div>
 
-            <details class="advanced-filters">
+            <details class="advanced-filters" hidden>
               <summary>
                 <div>
                   <span class="advanced-title">Advanced filters</span>
@@ -149,11 +153,6 @@
                 <span class="advanced-pill">Optional</span>
               </summary>
               <div class="advanced-grid">
-                <div class="field">
-                  <label for="countryInput">Country</label>
-                  <input id="countryInput" name="country" autocomplete="off" placeholder="Canada" />
-                </div>
-
                 <div class="field">
                   <label for="languageSelect">Language</label>
                   <select id="languageSelect" name="language"></select>

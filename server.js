@@ -130,9 +130,9 @@ const worldCategoryPresets = {
 };
 
 const sourcePresets = {
-  auto: "Авто: Google + сайты",
+  auto: "Google News",
   google: "Google News",
-  feeds: "Популярные сайты",
+  feeds: "Популярные сайты США",
   stocktitan: "Stock Titan",
   yahoo: "Yahoo Finance",
   investing: "Investing.com",
@@ -227,6 +227,19 @@ const countryPrimaryTerms = {
   france: "france",
   mexico: "mexico",
   australia: "australia"
+};
+
+const googleNewsRegions = {
+  usa: { hl: "en-US", gl: "US", ceid: "US:en" },
+  canada: { hl: "en-CA", gl: "CA", ceid: "CA:en" },
+  uk: { hl: "en-GB", gl: "GB", ceid: "GB:en" },
+  australia: { hl: "en-AU", gl: "AU", ceid: "AU:en" },
+  india: { hl: "en-IN", gl: "IN", ceid: "IN:en" },
+  germany: { hl: "en-DE", gl: "DE", ceid: "DE:en" },
+  france: { hl: "en-FR", gl: "FR", ceid: "FR:en" },
+  japan: { hl: "en-JP", gl: "JP", ceid: "JP:en" },
+  mexico: { hl: "en-MX", gl: "MX", ceid: "MX:en" },
+  ukraine: { hl: "en-UA", gl: "UA", ceid: "UA:en" }
 };
 
 const sourceProfiles = {
@@ -668,20 +681,18 @@ async function fetchGdeltArticles(request) {
 }
 
 async function fetchGoogleArticles(request) {
-  const params = new URLSearchParams({
-    hl: "en-US",
-    gl: "US",
-    ceid: "US:en"
-  });
+  const params = new URLSearchParams(buildGoogleNewsParams(request));
 
-  if (request.mode === "world") {
+  if (request.mode === "world" && !request.filters?.country) {
     const feeds = request.googleTopics.map((topic) => fetchGoogleTopicArticles(topic, params));
     const settled = await Promise.allSettled(feeds);
     const articles = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
     return rankWorldArticles(articles, request);
   }
 
-  const query = `${request.googleQuery || request.query} when:${toGoogleWhen(request.timespan)}`;
+  const countryTerm = getGoogleCountrySearchTerm(request);
+  const queryBase = [countryTerm, request.googleQuery || request.query].filter(Boolean).join(" ");
+  const query = `${queryBase} when:${toGoogleWhen(request.timespan)}`;
   params.set("q", query);
   const url = `${GOOGLE_NEWS_RSS}?${params.toString()}`;
   const xml = await fetchText(url, 16000);
@@ -2153,8 +2164,19 @@ function detectCountry(value) {
 }
 
 function sanitizeSource(source) {
-  const value = String(source || "auto").toLowerCase();
-  return Object.prototype.hasOwnProperty.call(sourcePresets, value) ? value : "auto";
+  const value = String(source || "google").toLowerCase();
+  return Object.prototype.hasOwnProperty.call(sourcePresets, value) ? value : "google";
+}
+
+function buildGoogleNewsParams(request) {
+  const country = normalizeCountry(request?.filters?.country);
+  return googleNewsRegions[country] || googleNewsRegions.usa;
+}
+
+function getGoogleCountrySearchTerm(request) {
+  const country = normalizeCountry(request?.filters?.country);
+  if (!country) return "";
+  return countryPrimaryTerms[country] || countryLexicon[country]?.[0] || country;
 }
 
 function sanitizeTimespan(timespan) {
