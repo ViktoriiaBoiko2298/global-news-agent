@@ -86,10 +86,10 @@ button {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(1640px, 100%);
+  width: min(1480px, 100%);
   height: 100vh;
   margin: 0 auto;
-  padding: 18px 20px 20px;
+  padding: 14px 18px 18px;
 }
 
 .topbar {
@@ -98,12 +98,12 @@ button {
   justify-content: space-between;
   gap: 20px;
   position: sticky;
-  top: 10px;
+  top: 8px;
   z-index: 30;
-  margin-bottom: 16px;
-  padding: 16px 22px;
+  margin-bottom: 12px;
+  padding: 12px 18px;
   border: 1px solid rgba(255, 255, 255, 0.56);
-  border-radius: 24px;
+  border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.58)),
     rgba(247, 249, 252, 0.54);
@@ -113,21 +113,21 @@ button {
 
 .brand-block {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .headline-row {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
 .hero-note {
-  max-width: 720px;
+  max-width: 640px;
   margin: 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -149,9 +149,9 @@ h2 {
 
 h1 {
   font-family: "Sora", "Manrope", sans-serif;
-  font-size: 42px;
+  font-size: 32px;
   font-weight: 700;
-  line-height: 0.94;
+  line-height: 0.96;
 }
 
 h2 {
@@ -163,7 +163,7 @@ h2 {
 
 .status-stack {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   justify-items: end;
 }
 
@@ -176,13 +176,13 @@ h2 {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .locale-button {
-  min-width: 42px;
-  min-height: 32px;
-  padding: 0 12px;
+  min-width: 38px;
+  min-height: 30px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -214,8 +214,8 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.84);
@@ -254,8 +254,8 @@ h2 {
 .signal-ribbon span {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: 30px;
+  padding: 0 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.7);
@@ -268,8 +268,8 @@ h2 {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 328px minmax(0, 1fr) 280px;
-  grid-template-areas: "controls results side";
+  grid-template-columns: 328px minmax(0, 1fr);
+  grid-template-areas: "controls results";
   gap: 18px;
   align-items: stretch;
   overflow: hidden;
@@ -322,16 +322,7 @@ h2 {
 }
 
 .side-panel {
-  grid-area: side;
-  display: grid;
-  gap: 14px;
-  align-content: start;
-  position: sticky;
-  top: 118px;
-  min-height: 0;
-  height: calc(100vh - 156px);
-  overflow: auto;
-  scrollbar-width: none;
+  display: none;
 }
 
 .side-panel::-webkit-scrollbar {
@@ -342,7 +333,7 @@ h2 {
 .results-panel {
   grid-area: results;
   min-height: 0;
-  height: calc(100vh - 156px);
+  height: calc(100vh - 132px);
   padding: 4px 8px 8px;
   border: 0;
   background: transparent;
@@ -1854,11 +1845,11 @@ select:focus {
 
 @media (max-width: 1380px) {
   .workspace {
-    grid-template-columns: 300px minmax(0, 1fr) 256px;
+    grid-template-columns: 292px minmax(0, 1fr);
   }
 
   h1 {
-    font-size: 38px;
+    font-size: 30px;
   }
 
   h2 {
@@ -1889,17 +1880,8 @@ select:focus {
     flex: initial;
     min-height: auto;
     grid-template-columns: 300px minmax(0, 1fr);
-    grid-template-areas:
-      "controls results"
-      "side side";
+    grid-template-areas: "controls results";
     align-items: start;
-    overflow: visible;
-  }
-
-  .side-panel {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    position: static;
-    height: auto;
     overflow: visible;
   }
 
@@ -1915,7 +1897,7 @@ select:focus {
 
   .control-panel {
     position: sticky;
-    top: 108px;
+    top: 96px;
   }
 
   .results-panel {
@@ -1956,14 +1938,14 @@ select:focus {
     display: block;
     height: auto;
     min-height: 100vh;
-    padding: 16px 14px 24px;
+    padding: 12px 12px 20px;
   }
 
   .topbar {
     top: 8px;
     align-items: flex-start;
     flex-direction: column;
-    padding: 16px 18px;
+    padding: 12px 14px;
   }
 
   .status-stack {
@@ -1974,17 +1956,11 @@ select:focus {
     grid-template-columns: 1fr;
     grid-template-areas:
       "controls"
-      "results"
-      "side";
+      "results";
   }
 
   .control-panel {
     position: static;
-    height: auto;
-  }
-
-  .side-panel {
-    grid-template-columns: 1fr;
     height: auto;
   }
 
@@ -2066,7 +2042,7 @@ select:focus {
   }
 
   h1 {
-    font-size: 34px;
+    font-size: 28px;
   }
 
   h2 {
@@ -2092,7 +2068,7 @@ select:focus {
   }
 
   h1 {
-    font-size: 30px;
+    font-size: 24px;
   }
 
   h2 {
