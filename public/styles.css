@@ -113,17 +113,8 @@ button {
 
 .brand-block {
   display: grid;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
-}
-
-.hero-note {
-  max-width: 760px;
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.35;
 }
 
 .eyebrow {
@@ -1849,10 +1840,6 @@ select:focus {
     font-size: 30px;
   }
 
-  .hero-note {
-    max-width: 520px;
-  }
-
   h2 {
     font-size: 38px;
   }
@@ -2079,10 +2066,6 @@ select:focus {
 
   h2 {
     font-size: 28px;
-  }
-
-  .hero-note {
-    font-size: 13px;
   }
 
   .editorial-hero-title {

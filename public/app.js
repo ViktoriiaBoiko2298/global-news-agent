@@ -92,7 +92,6 @@ const I18N = {
   en: {
     htmlLang: "en",
     title: "News Agent",
-    heroNote: "Global radar for world events, equities, crypto, commodities, and company signals.",
     ribbon: ["Politics", "Macro", "Equities", "Metals"],
     status: {
       ready: "ready",
@@ -261,7 +260,6 @@ const I18N = {
   ru: {
     htmlLang: "ru",
     title: "News Agent",
-    heroNote: "Глобальный радар для мировых событий, акций, крипты, сырья и корпоративных сигналов.",
     ribbon: ["Политика", "Макро", "Акции", "Металлы"],
     status: {
       ready: "готов",
@@ -430,7 +428,6 @@ const I18N = {
   uk: {
     htmlLang: "uk",
     title: "News Agent",
-    heroNote: "Глобальний радар для світових подій, акцій, крипти, сировини та корпоративних сигналів.",
     ribbon: ["Політика", "Макро", "Акції", "Метали"],
     status: {
       ready: "готово",
@@ -903,7 +900,6 @@ function applyLocale() {
 
   document.querySelector(".locale-switch")?.setAttribute("aria-label", ui.languageSwitcher);
   setText(".brand-block .eyebrow", ui.signalDesk);
-  setText(".hero-note", dict.heroNote);
   document.querySelectorAll(".signal-ribbon span").forEach((node, index) => {
     node.textContent = dict.ribbon[index] || node.textContent;
   });
