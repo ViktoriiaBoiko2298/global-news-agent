@@ -1128,28 +1128,17 @@ function renderEditorialBoard(clusters) {
   if (!clusters.length) return "";
 
   const lead = clusters[0];
-  const side = clusters.slice(1, 4);
-  const feed = clusters.slice(4, 12);
+  const feed = clusters.slice(1, 12);
 
   return `
     <section class="editorial-board">
-      <div class="editorial-stage">
-        ${renderEditorialHero(lead, 1)}
-        <aside class="editorial-side-list">
-          <div class="stream-section-head">
-            <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
-          </div>
-          <div class="editorial-side-items">
-            ${side.map((cluster, index) => renderEditorialSideItem(cluster, index + 1)).join("")}
-          </div>
-        </aside>
-      </div>
+      ${renderEditorialHero(lead, 1)}
       <section class="editorial-feed">
         <div class="stream-section-head">
-          <h3>${escapeHtml(currentUi().results.topStories)}</h3>
+          <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
         </div>
         <div class="editorial-feed-list">
-          ${feed.map((cluster, index) => renderEditorialFeedCard(cluster, index + 5)).join("")}
+          ${feed.map((cluster, index) => renderEditorialFeedCard(cluster, index + 2)).join("")}
         </div>
       </section>
     </section>
@@ -1161,13 +1150,13 @@ function renderStoryTextPanel(article, variant = "hero") {
   const primaryTag = translateTag(tags[0] || currentUi().results.topStories);
   const secondaryTag = article.domain || article.provider || "Source";
   const timeLabel = relativeTimeFromNow(article.publishedAt);
-  const summary = excerptText(article.summary || article.title, variant === "hero" ? 92 : variant === "side" ? 54 : 62);
-  const titleLines = splitHeadlineForPanel(article.title || "", variant === "hero" ? 3 : 2);
+  const summary = cleanText(article.summary || "");
   const panelClass =
     variant === "hero" ? "editorial-hero-media" : variant === "side" ? "editorial-side-media" : "editorial-feed-media";
   const toneClass = getStoryPanelToneClass(tags);
-  const accentWord = getStoryPanelAccent(tags, article.domain || article.provider || "");
-  const markerValue = getStoryPanelMarker(article, tags);
+  const tagMarkup = tags.slice(0, 2)
+    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
+    .join("");
 
   return `
     <div class="${panelClass} ${toneClass}">
@@ -1176,17 +1165,14 @@ function renderStoryTextPanel(article, variant = "hero") {
           <span>${escapeHtml(primaryTag)}</span>
           <span>${escapeHtml(timeLabel)}</span>
         </div>
-        <div class="editorial-media-accent" aria-hidden="true">
-          <span class="editorial-media-accent-word">${escapeHtml(accentWord)}</span>
-          <span class="editorial-media-accent-value">${escapeHtml(markerValue)}</span>
+        <div class="editorial-media-title-stack editorial-media-title-full">
+          <span>${escapeHtml(article.title || "News Agent")}</span>
         </div>
-        <div class="editorial-media-title-stack">
-          ${titleLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}
-        </div>
-        <p class="editorial-media-summary">${escapeHtml(summary)}</p>
+        ${summary ? `<p class="editorial-media-summary">${escapeHtml(summary)}</p>` : ""}
+        ${tagMarkup ? `<div class="editorial-media-tags">${tagMarkup}</div>` : ""}
         <div class="editorial-media-bottomline">
           <span>${escapeHtml(secondaryTag)}</span>
-          <span class="editorial-media-mark"></span>
+          <span>${escapeHtml(formatDateTime(article.publishedAt))}</span>
         </div>
       </div>
     </div>
@@ -1269,49 +1255,25 @@ function renderEditorialHero(cluster, order = 1) {
   const article = cluster.lead;
   const articleKey = articleDomKey(article.url);
   const articleUrl = article.finalUrl || article.url;
-  const tags = selectCardTags(article.tags || []).slice(0, 2)
-    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
-    .join("");
-  const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
-  const summary = excerptText(article.summary || article.title, 188);
-  const meta = [article.domain || article.provider || "Source", article.language || "", formatDateTime(article.publishedAt)].filter(Boolean).join("  •  ");
-  const leadLabel = state.locale === "ru" ? "Lead signal" : state.locale === "uk" ? "Lead signal" : "Lead signal";
   const delay = `${order * 45}ms`;
 
   return `
     <article class="editorial-hero" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
-      <div class="editorial-hero-copy">
-        <div class="editorial-hero-header">
-          <div class="editorial-hero-meta">
-            <span class="editorial-kicker">${escapeHtml(currentUi().results.topStories)}</span>
-            ${clusterBadge}
-          </div>
-          <div class="editorial-hero-signalbar">
-            <span class="editorial-signal-pill">${escapeHtml(leadLabel)}</span>
-            <span class="editorial-hero-slash"></span>
-            <span class="editorial-hero-time">${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
-          </div>
-        </div>
-        <a class="editorial-hero-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
-        <p class="editorial-hero-summary">${escapeHtml(summary)}</p>
-        ${tags ? `<div class="editorial-tags">${tags}</div>` : ""}
-        <div class="editorial-hero-footer">
-          <span>${escapeHtml(meta)}</span>
-          <button
-            class="icon-button editorial-share-button"
-            type="button"
-            aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
-            data-share-article='${escapeAttribute(JSON.stringify({
-              title: article.title,
-              url: articleUrl,
-              provider: article.provider || article.domain || "News Agent"
-            }))}'
-          >
-            <i data-lucide="share-2"></i>
-          </button>
-        </div>
-      </div>
-      ${renderStoryTextPanel(article, "hero")}
+      <a class="editorial-story-link" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">
+        ${renderStoryTextPanel(article, "hero")}
+      </a>
+      <button
+        class="icon-button editorial-share-button editorial-story-share"
+        type="button"
+        aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
+        data-share-article='${escapeAttribute(JSON.stringify({
+          title: article.title,
+          url: articleUrl,
+          provider: article.provider || article.domain || "News Agent"
+        }))}'
+      >
+        <i data-lucide="share-2"></i>
+      </button>
     </article>
   `;
 }
@@ -1320,23 +1282,13 @@ function renderEditorialSideItem(cluster, index) {
   const article = cluster.lead;
   const articleKey = articleDomKey(article.url);
   const articleUrl = article.finalUrl || article.url;
-  const summary = excerptText(article.summary || article.title, 88);
-  const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
   const delay = `${(index + 1) * 55}ms`;
 
   return `
     <article class="editorial-side-item" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
-      <span class="editorial-side-index">${index}.</span>
-      <div class="editorial-side-copy">
-        <a class="editorial-side-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
-        <p class="editorial-side-summary">${escapeHtml(summary)}</p>
-        <div class="editorial-side-meta">
-          <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
-          <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
-          ${clusterBadge}
-        </div>
-      </div>
-      ${renderStoryTextPanel(article, "side")}
+      <a class="editorial-story-link" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">
+        ${renderStoryTextPanel(article, "side")}
+      </a>
     </article>
   `;
 }
@@ -1345,26 +1297,15 @@ function renderEditorialFeedCard(cluster, order = 5) {
   const article = cluster.lead;
   const articleKey = articleDomKey(article.url);
   const articleUrl = article.finalUrl || article.url;
-  const tags = selectCardTags(article.tags || []).slice(0, 2)
-    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
-    .join("");
-  const summary = excerptText(article.summary || article.title, 120);
   const delay = `${order * 38}ms`;
 
   return `
     <article class="editorial-feed-card" data-article-key="${escapeAttribute(articleKey)}" style="--enter-delay:${escapeAttribute(delay)}">
-      <div class="editorial-feed-copy">
-        <div class="editorial-feed-meta">
-          <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
-          <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
-        </div>
-        <a class="editorial-feed-title" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
-        <p class="editorial-feed-summary">${escapeHtml(summary)}</p>
-        ${tags ? `<div class="editorial-tags editorial-tags-inline">${tags}</div>` : ""}
-      </div>
-      ${renderStoryTextPanel(article, "feed")}
+      <a class="editorial-story-link" data-article-link href="${escapeAttribute(articleUrl)}" target="_blank" rel="noreferrer">
+        ${renderStoryTextPanel(article, "feed")}
+      </a>
       <button
-        class="icon-button editorial-share-button"
+        class="icon-button editorial-share-button editorial-story-share"
         type="button"
         aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
         data-share-article='${escapeAttribute(JSON.stringify({
@@ -1628,49 +1569,22 @@ function renderIdlePreview() {
         <p>${escapeHtml(ui.results.idle)}</p>
       </div>
       <section class="editorial-board">
-        <div class="editorial-stage">
-          <article class="editorial-hero idle-editorial-hero">
-            <div class="editorial-hero-copy">
-              <div class="editorial-hero-meta">
-                <span class="editorial-kicker">${escapeHtml(ui.results.topStories)}</span>
-              </div>
-              <div class="editorial-hero-title">${escapeHtml(lead.title)}</div>
-              <p class="editorial-hero-summary">${escapeHtml(lead.summary)}</p>
-              <div class="editorial-tags">${lead.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
-            </div>
-            ${renderStoryTextPanel(lead, "hero")}
-          </article>
-          <aside class="editorial-side-list">
-            <div class="stream-section-head">
-              <h3>${escapeHtml(ui.results.moreStories)}</h3>
-            </div>
-            <div class="editorial-side-items">
-              ${side.map((item, index) => `
-                <article class="editorial-side-item idle-side-item">
-                  <span class="editorial-side-index">${index + 1}.</span>
-                  <div class="editorial-side-copy">
-                    <div class="editorial-side-title">${escapeHtml(item.title)}</div>
-                    <p class="editorial-side-summary">${escapeHtml(item.summary)}</p>
-                  </div>
-                  ${renderStoryTextPanel(item, "side")}
-                </article>
-              `).join("")}
-            </div>
-          </aside>
-        </div>
+        <article class="editorial-hero idle-editorial-hero">
+          ${renderStoryTextPanel(lead, "hero")}
+        </article>
       </section>
       <section class="story-list-section">
         <div class="stream-section-head">
           <h3>${escapeHtml(ui.results.moreStories)}</h3>
         </div>
         <div class="editorial-feed-list">
+          ${side.map((item) => `
+            <article class="editorial-feed-card idle-feed-card">
+              ${renderStoryTextPanel(item, "feed")}
+            </article>
+          `).join("")}
           ${list.map((item) => `
             <article class="editorial-feed-card idle-feed-card">
-              <div class="editorial-feed-copy">
-                <div class="editorial-feed-meta"><span>Preview</span></div>
-                <div class="editorial-feed-title">${escapeHtml(item.title)}</div>
-                <p class="editorial-feed-summary">${escapeHtml(item.summary)}</p>
-              </div>
               ${renderStoryTextPanel(item, "feed")}
             </article>
           `).join("")}
@@ -2472,4 +2386,8 @@ function excerptText(value, maxLength) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trim()}...`;
+}
+
+function cleanText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
