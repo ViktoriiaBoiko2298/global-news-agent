@@ -29,6 +29,7 @@ const ALERT_MONITOR_TICK_MS = 60 * 1000;
 const cache = new Map();
 const tickerCache = new Map();
 const articleImageCache = new Map();
+const articleAvailabilityCache = new Map();
 let gdeltQueue = Promise.resolve();
 let gdeltNextAt = 0;
 let alertMonitorRunning = false;
@@ -590,7 +591,8 @@ async function fetchNews(request) {
     }
   }
 
-  const processed = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
+  const candidatePool = finalizeArticlesForRequest(collected, request).slice(0, Math.min(Math.max(request.limit + 8, 14), 24));
+  const processed = (await filterUnavailableArticles(candidatePool)).slice(0, request.limit);
   if (!processed.length) {
     if (successfulProviders > 0) {
       throw new Error("Новости отсутствуют.");
@@ -1051,6 +1053,39 @@ async function runWithConcurrency(items, limit, worker) {
   });
 
   await Promise.allSettled(runners);
+}
+
+async function filterUnavailableArticles(articles) {
+  if (!articles.length) return articles;
+
+  const checks = await Promise.all(
+    articles.map(async (article) => ({
+      article,
+      unavailable: await isUnavailableArticleUrl(article.url)
+    }))
+  );
+
+  return checks.filter((entry) => !entry.unavailable).map((entry) => entry.article);
+}
+
+async function isUnavailableArticleUrl(url) {
+  const key = String(url || "").split("#")[0];
+  if (!key) return false;
+
+  const cached = articleAvailabilityCache.get(key);
+  if (cached && Date.now() - cached.createdAt < ARTICLE_IMAGE_CACHE_TTL_MS) {
+    return cached.unavailable;
+  }
+
+  try {
+    await fetchHtml(key, 7000);
+    articleAvailabilityCache.set(key, { createdAt: Date.now(), unavailable: false });
+    return false;
+  } catch (error) {
+    const unavailable = isDeadArticlePageError(error.message || "");
+    articleAvailabilityCache.set(key, { createdAt: Date.now(), unavailable });
+    return unavailable;
+  }
 }
 
 function compareArticlesByRelevance(a, b) {
@@ -2436,6 +2471,14 @@ function isProviderUnavailableError(message) {
     "источник вернул некорректный ответ",
     "источник новостей не ответил вовремя",
     "fetch failed"
+  ].some((part) => text.includes(part));
+}
+
+function isDeadArticlePageError(message) {
+  const text = String(message || "").toLowerCase();
+  return [
+    "источник временно недоступен",
+    "источник недоступен по этому адресу"
   ].some((part) => text.includes(part));
 }
 
