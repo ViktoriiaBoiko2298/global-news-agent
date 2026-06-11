@@ -268,9 +268,9 @@ h2 {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 328px minmax(0, 1fr);
+  grid-template-columns: 286px minmax(0, 1fr);
   grid-template-areas: "controls results";
-  gap: 18px;
+  gap: 14px;
   align-items: stretch;
   overflow: hidden;
 }
@@ -284,11 +284,11 @@ h2 {
 .control-panel {
   grid-area: controls;
   position: sticky;
-  top: 118px;
+  top: 88px;
   align-self: start;
   min-height: 0;
-  height: calc(100vh - 156px);
-  padding: 18px;
+  height: calc(100vh - 110px);
+  padding: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background:
     linear-gradient(180deg, rgba(19, 24, 39, 0.98), rgba(10, 16, 29, 0.98)),
@@ -348,8 +348,8 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .control-panel .eyebrow {
@@ -359,8 +359,8 @@ h2 {
 .panel-code {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 11px;
+  min-height: 26px;
+  padding: 0 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(79, 107, 255, 0.1);
@@ -377,13 +377,13 @@ h2 {
 
 .panel-intro {
   display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .panel-intro h2 {
   font-family: "Sora", "Manrope", sans-serif;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1.04;
   color: var(--text-on-dark);
@@ -392,15 +392,15 @@ h2 {
 .panel-intro p {
   margin: 0;
   color: rgba(226, 233, 255, 0.72);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 18px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .tab,
@@ -411,12 +411,12 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  border-radius: 16px;
+  min-height: 40px;
+  border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.1);
   background: rgba(255, 255, 255, 0.84);
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   transition:
     transform 150ms ease,
@@ -430,8 +430,8 @@ h2 {
 .primary svg,
 .ghost svg,
 .icon-button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
 }
 
@@ -461,15 +461,15 @@ h2 {
 .search-form {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .search-primary {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 22px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03));
 }
 
@@ -477,12 +477,12 @@ h2 {
 .advanced-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .field {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .mode-field {
@@ -495,7 +495,7 @@ h2 {
 
 label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -508,10 +508,10 @@ label {
 input,
 select {
   width: 100%;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   color: var(--text);
   outline: none;
@@ -536,7 +536,7 @@ select {
   border-color: rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-on-dark);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -560,8 +560,8 @@ select:focus {
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 0;
 }
 
 .primary {
@@ -584,17 +584,17 @@ select:focus {
 .quick-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 0;
 }
 
 .small-action {
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .advanced-filters {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 22px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   overflow: hidden;
 }
@@ -603,8 +603,8 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px;
+  gap: 12px;
+  padding: 12px;
   cursor: pointer;
   list-style: none;
 }
@@ -633,13 +633,13 @@ select:focus {
 
 .advanced-title {
   color: var(--text-on-dark);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .advanced-copy {
   color: rgba(214, 223, 255, 0.62);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -666,29 +666,29 @@ select:focus {
 }
 
 .advanced-grid {
-  padding: 14px;
+  padding: 12px;
 }
 
 .automation-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 14px 0 0;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .automation-row select {
-  max-width: 150px;
+  max-width: 122px;
 }
 
 .switch {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: rgba(248, 251, 255, 0.92);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -700,8 +700,8 @@ select:focus {
 
 .switch > span:first-of-type {
   position: relative;
-  width: 46px;
-  height: 26px;
+  width: 40px;
+  height: 22px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   transition: background 0.2s ease;
@@ -710,10 +710,10 @@ select:focus {
 .switch > span:first-of-type::after {
   content: "";
   position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 18px;
-  height: 18px;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: #ffffff;
   transition: transform 0.2s ease;
@@ -728,7 +728,7 @@ select:focus {
 }
 
 .switch input:checked + span::after {
-  transform: translateX(20px);
+  transform: translateX(18px);
 }
 
 .metric-band {
