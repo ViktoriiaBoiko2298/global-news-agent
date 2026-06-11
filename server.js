@@ -497,7 +497,7 @@ async function buildNewsRequest(queryParams) {
   const mode = String(queryParams.mode || "world").toLowerCase();
   const source = sanitizeSource(queryParams.source);
   const timespan = sanitizeTimespan(queryParams.timespan);
-  const limit = clamp(Number(queryParams.limit || 30), 5, 60);
+  const limit = getSearchLimit(timespan);
   const filters = normalizeFilters(queryParams);
   const trackHistory = queryParams.track !== "0";
 
@@ -604,7 +604,7 @@ async function fetchNews(request) {
     }
   }
 
-  const candidatePool = finalizeArticlesForRequest(collected, request).slice(0, Math.min(Math.max(request.limit + 8, 14), 24));
+  const candidatePool = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
   const processed = (await filterUnavailableArticles(candidatePool)).slice(0, request.limit);
   if (!processed.length) {
     if (successfulProviders > 0) {
@@ -2166,6 +2166,19 @@ function detectCountry(value) {
 function sanitizeSource(source) {
   const value = String(source || "google").toLowerCase();
   return Object.prototype.hasOwnProperty.call(sourcePresets, value) ? value : "google";
+}
+
+function getSearchLimit(timespan) {
+  const map = {
+    "1h": 60,
+    "6h": 90,
+    "12h": 120,
+    "24h": 180,
+    "48h": 220,
+    "72h": 260,
+    "7d": 320
+  };
+  return map[timespan] || 180;
 }
 
 function buildGoogleNewsParams(request) {

@@ -2205,7 +2205,7 @@ select:focus {
 
 .core-grid {
   grid-column: 6 / -1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 

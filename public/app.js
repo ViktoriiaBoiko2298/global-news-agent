@@ -35,7 +35,6 @@ const elements = {
   queryInput: document.querySelector("#queryInput"),
   timespanSelect: document.querySelector("#timespanSelect"),
   sourceSelect: document.querySelector("#sourceSelect"),
-  limitSelect: document.querySelector("#limitSelect"),
   countryInput: document.querySelector("#countryInput"),
   languageSelect: document.querySelector("#languageSelect"),
   focusSelect: document.querySelector("#focusSelect"),
@@ -140,7 +139,6 @@ const I18N = {
         queryInput: "Query",
         timespanSelect: "Time range",
         sourceSelect: "Source",
-        limitSelect: "Limit",
         countryInput: "Country",
         languageSelect: "Language",
         focusSelect: "Focus",
@@ -308,7 +306,6 @@ const I18N = {
         queryInput: "Запрос",
         timespanSelect: "Период",
         sourceSelect: "Источник",
-        limitSelect: "Лимит",
         countryInput: "Страна",
         languageSelect: "Язык",
         focusSelect: "Фокус",
@@ -476,7 +473,6 @@ const I18N = {
         queryInput: "Запит",
         timespanSelect: "Період",
         sourceSelect: "Джерело",
-        limitSelect: "Ліміт",
         countryInput: "Країна",
         languageSelect: "Мова",
         focusSelect: "Фокус",
@@ -979,7 +975,6 @@ function hydrateFromUrl() {
   state.mode = params.get("mode") || "world";
   elements.sourceSelect.value = params.get("source") || "google";
   elements.timespanSelect.value = params.get("timespan") || "24h";
-  elements.limitSelect.value = params.get("limit") || "30";
   elements.worldCategorySelect.value = params.get("category") || "";
   elements.tickerInput.value = params.get("ticker") || "";
   elements.commoditySelect.value = params.get("commodity") || "gold";
@@ -1057,7 +1052,6 @@ function buildRequest(overrides = {}) {
     mode: state.mode,
     source: elements.sourceSelect.value,
     timespan: elements.timespanSelect.value,
-    limit: elements.limitSelect.value,
     category: elements.worldCategorySelect.value,
     country: elements.countryInput.value.trim(),
     language: elements.languageSelect.value,
@@ -1835,7 +1829,6 @@ function applyRequestToForm(request) {
   setMode(state.mode);
   elements.sourceSelect.value = localizedMap("sources")[request.source] ? request.source : "google";
   elements.timespanSelect.value = request.timespan || "24h";
-  elements.limitSelect.value = String(request.limit || 30);
   elements.worldCategorySelect.value = request.category || "all";
   elements.tickerInput.value = request.ticker || "";
   elements.commoditySelect.value = request.commodity || "gold";
