@@ -96,12 +96,12 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 18px;
   position: sticky;
   top: 8px;
   z-index: 30;
   margin-bottom: 12px;
-  padding: 12px 18px;
+  padding: 10px 18px;
   border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 18px;
   background:
@@ -113,23 +113,17 @@ button {
 
 .brand-block {
   display: grid;
-  gap: 4px;
-}
-
-.headline-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
 }
 
 .hero-note {
-  max-width: 640px;
-  margin: 0;
+  max-width: 760px;
+  margin: 2px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .eyebrow {
@@ -162,9 +156,12 @@ h2 {
 }
 
 .status-stack {
-  display: grid;
-  gap: 8px;
-  justify-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .locale-switch {
@@ -213,7 +210,7 @@ h2 {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 32px;
   padding: 0 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -246,7 +243,7 @@ h2 {
 
 .signal-ribbon {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -1852,6 +1849,10 @@ select:focus {
     font-size: 30px;
   }
 
+  .hero-note {
+    max-width: 520px;
+  }
+
   h2 {
     font-size: 38px;
   }
@@ -1949,7 +1950,9 @@ select:focus {
   }
 
   .status-stack {
-    justify-items: start;
+    justify-content: flex-start;
+    margin-left: 0;
+    width: 100%;
   }
 
   .workspace {
@@ -1965,7 +1968,6 @@ select:focus {
   }
 
   .results-head,
-  .headline-row,
   .automation-row {
     flex-direction: column;
     align-items: stretch;
@@ -2047,6 +2049,10 @@ select:focus {
 
   h2 {
     font-size: 32px;
+  }
+
+  .signal-ribbon {
+    flex-wrap: wrap;
   }
 }
 
