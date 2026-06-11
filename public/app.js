@@ -1129,62 +1129,65 @@ function renderResults(data) {
     return;
   }
 
-  elements.resultsList.innerHTML = renderStoryStream(clusters);
+  elements.resultsList.innerHTML = renderEditorialBoard(clusters);
   bindResultActions();
 }
 
-function renderStoryStream(clusters) {
-  const lead = clusters.slice(0, 4);
-  const rest = clusters.slice(4);
+function renderEditorialBoard(clusters) {
+  if (!clusters.length) return "";
 
-  const leadSection = lead.length
-    ? `
-      <section class="stream-section">
+  const lead = clusters[0];
+  const side = clusters.slice(1, 4);
+  const feed = clusters.slice(4, 12);
+
+  return `
+    <section class="editorial-board">
+      <div class="editorial-stage">
+        ${renderEditorialHero(lead)}
+        <aside class="editorial-side-list">
+          <div class="stream-section-head">
+            <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
+          </div>
+          <div class="editorial-side-items">
+            ${side.map((cluster, index) => renderEditorialSideItem(cluster, index + 1)).join("")}
+          </div>
+        </aside>
+      </div>
+      <section class="editorial-feed">
         <div class="stream-section-head">
           <h3>${escapeHtml(currentUi().results.topStories)}</h3>
         </div>
-        <div class="stream-grid">
-          ${lead.map((cluster, index) => renderStreamCard(cluster, index === 0)).join("")}
+        <div class="editorial-feed-list">
+          ${feed.map(renderEditorialFeedCard).join("")}
         </div>
       </section>
-    `
-    : "";
-
-  const restSection = rest.length
-    ? `
-      <section class="story-list-section">
-        <div class="stream-section-head">
-          <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
-        </div>
-        <div class="story-list">
-          ${rest.map(renderStoryListCard).join("")}
-        </div>
-      </section>
-    `
-    : "";
-
-  return `${leadSection}${restSection}`;
+    </section>
+  `;
 }
 
-function renderStreamCard(cluster, featured = false) {
+function renderEditorialHero(cluster) {
   const article = cluster.lead;
   const tags = selectCardTags(article.tags || []).slice(0, 2)
     .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
     .join("");
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
-  const meta = [article.domain || article.provider || "Source", relativeTimeFromNow(article.publishedAt)].filter(Boolean).join("  •  ");
-  const summary = excerptText(article.summary || article.title, featured ? 126 : 96);
-  const bg = article.image
-    ? `style="background-image:linear-gradient(180deg, rgba(7, 12, 20, 0.04), rgba(7, 12, 20, 0.78)), url('${escapeAttribute(article.image)}')"`
-    : "";
+  const summary = excerptText(article.summary || article.title, 188);
+  const meta = [article.domain || article.provider || "Source", article.language || "", formatDateTime(article.publishedAt)].filter(Boolean).join("  •  ");
 
   return `
-    <article class="stream-card${featured ? " featured" : ""}${article.image ? "" : " no-image"}" ${bg}>
-      <div class="stream-card-overlay">
-        <div class="stream-card-top">
-          ${tags ? `<div class="stream-card-tags">${tags}</div>` : `<div class="stream-card-tags"><span>${escapeHtml(currentUi().results.streamFallback)}</span></div>`}
+    <article class="editorial-hero">
+      <div class="editorial-hero-copy">
+        <div class="editorial-hero-meta">
+          <span class="editorial-kicker">${escapeHtml(currentUi().results.topStories)}</span>
+          ${clusterBadge}
+        </div>
+        <a class="editorial-hero-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <p class="editorial-hero-summary">${escapeHtml(summary)}</p>
+        ${tags ? `<div class="editorial-tags">${tags}</div>` : ""}
+        <div class="editorial-hero-footer">
+          <span>${escapeHtml(meta)}</span>
           <button
-            class="icon-button article-share-button stream-share-button"
+            class="icon-button editorial-share-button"
             type="button"
             aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
             data-share-article='${escapeAttribute(JSON.stringify({
@@ -1196,40 +1199,55 @@ function renderStreamCard(cluster, featured = false) {
             <i data-lucide="share-2"></i>
           </button>
         </div>
-        <a class="stream-card-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
-        <p class="stream-card-summary">${escapeHtml(summary)}</p>
-        <div class="stream-card-footer">
-          <span>${escapeHtml(meta)}</span>
-          ${clusterBadge}
-        </div>
       </div>
+      ${article.image ? `<img class="editorial-hero-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-hero-image fallback"></div>`}
     </article>
   `;
 }
 
-function renderStoryListCard(cluster) {
+function renderEditorialSideItem(cluster, index) {
   const article = cluster.lead;
-  const tags = selectCardTags(article.tags || []).slice(0, 2)
-    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
-    .join("");
-  const summary = excerptText(article.summary || article.title, 132);
+  const summary = excerptText(article.summary || article.title, 88);
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
 
   return `
-    <article class="story-list-card${article.image ? "" : " no-image"}">
-      ${article.image ? `<img class="story-list-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="story-list-image fallback"></div>`}
-      <div class="story-list-content">
-        <div class="story-list-meta">
+    <article class="editorial-side-item${article.image ? "" : " no-image"}">
+      <span class="editorial-side-index">${index}.</span>
+      <div class="editorial-side-copy">
+        <a class="editorial-side-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <p class="editorial-side-summary">${escapeHtml(summary)}</p>
+        <div class="editorial-side-meta">
           <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
           <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
           ${clusterBadge}
         </div>
-        <a class="story-list-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
-        <p class="story-list-summary">${escapeHtml(summary)}</p>
-        ${tags ? `<div class="story-list-tags">${tags}</div>` : ""}
       </div>
+      ${article.image ? `<img class="editorial-side-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-side-image fallback"></div>`}
+    </article>
+  `;
+}
+
+function renderEditorialFeedCard(cluster) {
+  const article = cluster.lead;
+  const tags = selectCardTags(article.tags || []).slice(0, 2)
+    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
+    .join("");
+  const summary = excerptText(article.summary || article.title, 120);
+
+  return `
+    <article class="editorial-feed-card${article.image ? "" : " no-image"}">
+      <div class="editorial-feed-copy">
+        <div class="editorial-feed-meta">
+          <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
+          <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
+        </div>
+        <a class="editorial-feed-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <p class="editorial-feed-summary">${escapeHtml(summary)}</p>
+        ${tags ? `<div class="editorial-tags editorial-tags-inline">${tags}</div>` : ""}
+      </div>
+      ${article.image ? `<img class="editorial-feed-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="editorial-feed-image fallback"></div>`}
       <button
-        class="icon-button article-share-button"
+        class="icon-button editorial-share-button"
         type="button"
         aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
         data-share-article='${escapeAttribute(JSON.stringify({
@@ -1375,21 +1393,20 @@ function renderIdleState(message = "") {
 
 function renderIdlePreview() {
   const ui = currentUi();
-  const preview = [
+  const lead = {
+    title: state.locale === "ru" ? "Выбери тему и получи белую editorial-ленту с главной историей наверху" : state.locale === "uk" ? "Обери тему і отримай світлу editorial-стрічку з головною історією зверху" : "Pick a topic and get a clean editorial feed with a top story first",
+    summary: state.locale === "ru" ? "Этот режим показывает одну крупную главную историю, короткую боковую подборку и более спокойную ленту ниже." : state.locale === "uk" ? "Цей режим показує одну велику головну історію, коротку бічну добірку та спокійнішу стрічку нижче." : "This layout gives you one large lead story, a short side selection, and a calmer stream below.",
+    tags: state.locale === "ru" ? ["обзор", "мир"] : state.locale === "uk" ? ["огляд", "світ"] : ["overview", "world"]
+  };
+
+  const side = [
     {
-      title: state.locale === "ru" ? "Лента мировых новостей в визуальном потоке" : state.locale === "uk" ? "Стрічка світових новин у візуальному потоці" : "World news in a visual stream",
-      summary: state.locale === "ru" ? "Выбери тему и получишь крупные lead-cards сверху и компактную ленту ниже." : state.locale === "uk" ? "Обери тему і отримаєш великі lead-cards зверху та компактну стрічку нижче." : "Pick a topic and get big lead cards on top with a compact stream below.",
-      tags: state.locale === "ru" ? ["мир", "политика"] : state.locale === "uk" ? ["світ", "політика"] : ["world", "politics"]
+      title: state.locale === "ru" ? "Тикеры, сырье и мир разделены по режимам" : state.locale === "uk" ? "Тікери, сировина і світ розділені за режимами" : "Tickers, commodities, and world are separated by mode",
+      summary: state.locale === "ru" ? "Так проще быстро переключаться между разными типами новостей." : state.locale === "uk" ? "Так простіше швидко перемикатися між різними типами новин." : "That makes it easier to move between very different news flows."
     },
     {
-      title: state.locale === "ru" ? "Тикерный режим без лишнего шума" : state.locale === "uk" ? "Тікерний режим без зайвого шуму" : "Ticker mode without the noise",
-      summary: state.locale === "ru" ? "Для NVDA, AAPL, NRED или любого другого тикера можно держать только релевантные истории." : state.locale === "uk" ? "Для NVDA, AAPL, NRED або будь-якого іншого тікера можна тримати лише релевантні історії." : "For NVDA, AAPL, NRED, or any other ticker, keep only relevant stories.",
-      tags: state.locale === "ru" ? ["тикер", "компании"] : state.locale === "uk" ? ["тікер", "компанії"] : ["ticker", "companies"]
-    },
-    {
-      title: state.locale === "ru" ? "Алерты по странам, акциям, крипте и сырью" : state.locale === "uk" ? "Алерти за країнами, акціями, криптою та сировиною" : "Alerts for countries, equities, crypto, and commodities",
-      summary: state.locale === "ru" ? "Настраивай сигналы под Canada, gold, stock market или свой кастомный запрос." : state.locale === "uk" ? "Налаштовуй сигнали під Canada, gold, stock market або свій кастомний запит." : "Set signals for Canada, gold, stock market, or your own custom query.",
-      tags: state.locale === "ru" ? ["алерты", "рынки"] : state.locale === "uk" ? ["алерти", "ринки"] : ["alerts", "markets"]
+      title: state.locale === "ru" ? "Семантические фильтры и алерты остаются на месте" : state.locale === "uk" ? "Семантичні фільтри та алерти залишаються на місці" : "Semantic filters and alerts stay available",
+      summary: state.locale === "ru" ? "Внешний вид будет чище, но функции поиска и алертов никуда не пропадают." : state.locale === "uk" ? "Вигляд стане чистішим, але функції пошуку та алертів нікуди не зникають." : "The layout gets cleaner without losing the search and alert tools."
     }
   ];
 
@@ -1414,37 +1431,51 @@ function renderIdlePreview() {
         <span class="idle-preview-kicker">${escapeHtml(ui.results.idleLabel)}</span>
         <p>${escapeHtml(ui.results.idle)}</p>
       </div>
-      <section class="stream-section">
-        <div class="stream-section-head">
-          <h3>${escapeHtml(ui.results.topStories)}</h3>
-        </div>
-        <div class="stream-grid idle-stream-grid">
-          ${preview.map((item, index) => `
-            <article class="stream-card ${index === 0 ? "featured" : ""} no-image idle-card">
-              <div class="stream-card-overlay">
-                <div class="stream-card-top">
-                  <div class="stream-card-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
-                </div>
-                <div class="stream-card-title">${escapeHtml(item.title)}</div>
-                <p class="stream-card-summary">${escapeHtml(item.summary)}</p>
+      <section class="editorial-board">
+        <div class="editorial-stage">
+          <article class="editorial-hero idle-editorial-hero">
+            <div class="editorial-hero-copy">
+              <div class="editorial-hero-meta">
+                <span class="editorial-kicker">${escapeHtml(ui.results.topStories)}</span>
               </div>
-            </article>
-          `).join("")}
+              <div class="editorial-hero-title">${escapeHtml(lead.title)}</div>
+              <p class="editorial-hero-summary">${escapeHtml(lead.summary)}</p>
+              <div class="editorial-tags">${lead.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+            </div>
+            <div class="editorial-hero-image fallback"></div>
+          </article>
+          <aside class="editorial-side-list">
+            <div class="stream-section-head">
+              <h3>${escapeHtml(ui.results.moreStories)}</h3>
+            </div>
+            <div class="editorial-side-items">
+              ${side.map((item, index) => `
+                <article class="editorial-side-item no-image idle-side-item">
+                  <span class="editorial-side-index">${index + 1}.</span>
+                  <div class="editorial-side-copy">
+                    <div class="editorial-side-title">${escapeHtml(item.title)}</div>
+                    <p class="editorial-side-summary">${escapeHtml(item.summary)}</p>
+                  </div>
+                  <div class="editorial-side-image fallback"></div>
+                </article>
+              `).join("")}
+            </div>
+          </aside>
         </div>
       </section>
       <section class="story-list-section">
         <div class="stream-section-head">
           <h3>${escapeHtml(ui.results.moreStories)}</h3>
         </div>
-        <div class="story-list idle-story-list">
+        <div class="editorial-feed-list">
           ${list.map((item) => `
-            <article class="story-list-card idle-story-card">
-              <div class="story-list-image fallback"></div>
-              <div class="story-list-content">
-                <div class="story-list-meta"><span>Preview</span></div>
-                <div class="story-list-title">${escapeHtml(item.title)}</div>
-                <p class="story-list-summary">${escapeHtml(item.summary)}</p>
+            <article class="editorial-feed-card no-image idle-feed-card">
+              <div class="editorial-feed-copy">
+                <div class="editorial-feed-meta"><span>Preview</span></div>
+                <div class="editorial-feed-title">${escapeHtml(item.title)}</div>
+                <p class="editorial-feed-summary">${escapeHtml(item.summary)}</p>
               </div>
+              <div class="editorial-feed-image fallback"></div>
             </article>
           `).join("")}
         </div>
