@@ -1300,11 +1300,20 @@ function renderIdleState(message = "") {
 }
 
 function renderError(message) {
-  elements.message.textContent = message;
+  elements.message.textContent = sanitizeUiError(message);
   elements.message.hidden = false;
   elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(currentUi().results.empty)}</div>`;
   if (elements.totalCount) elements.totalCount.textContent = "0";
   if (elements.sourceName) elements.sourceName.textContent = "-";
+}
+
+function sanitizeUiError(message) {
+  const raw = String(message || "").trim();
+  if (!raw) return currentUi().results.empty;
+  if (/<\/?[a-z][\s\S]*>/i.test(raw)) {
+    return currentUi().results.empty;
+  }
+  return raw;
 }
 
 async function saveCurrentWatch() {

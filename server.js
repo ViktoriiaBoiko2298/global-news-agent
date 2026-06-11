@@ -592,7 +592,13 @@ async function fetchNews(request) {
 
   const processed = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
   if (!processed.length) {
-    throw new Error(successfulProviders > 0 ? "Новости отсутствуют." : errors.length ? errors.join("; ") : "Новости отсутствуют.");
+    if (successfulProviders > 0) {
+      throw new Error("Новости отсутствуют.");
+    }
+    if (errors.length && errors.every(isProviderUnavailableError)) {
+      throw new Error("Источники временно недоступны. Попробуйте позже.");
+    }
+    throw new Error(errors.length ? errors.join("; ") : "Новости отсутствуют.");
   }
 
   await enrichArticleImages(processed);
@@ -1522,7 +1528,10 @@ async function fetchJson(url, timeoutMs) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(cleanText(text).slice(0, 160) || "Некорректный JSON-ответ.");
+    if (looksLikeHtmlDocument(text)) {
+      throw new Error(classifyUnavailableResponse(text));
+    }
+    throw new Error(cleanText(stripHtml(text)).slice(0, 160) || "Некорректный JSON-ответ.");
   }
 }
 
@@ -1543,9 +1552,17 @@ async function fetchHtml(url, timeoutMs) {
       }
     });
     const text = await response.text();
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+
+    if (looksLikeUnavailableHtml(text, contentType)) {
+      throw new Error(classifyUnavailableResponse(text));
+    }
 
     if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}: ${cleanText(text).slice(0, 120)}`);
+      const message = looksLikeHtmlDocument(text)
+        ? classifyUnavailableResponse(text)
+        : `${response.status} ${response.statusText}: ${cleanText(stripHtml(text)).slice(0, 120)}`;
+      throw new Error(message);
     }
     if (/please limit requests/i.test(text)) {
       throw new Error("Источник просит делать запросы реже. Попробуйте еще раз через несколько секунд.");
@@ -2381,6 +2398,45 @@ function decodeHtml(value) {
 
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function looksLikeHtmlDocument(value) {
+  const text = String(value || "");
+  return /<!doctype html|<html\b|<head\b|<body\b/i.test(text);
+}
+
+function looksLikeUnavailableHtml(value, contentType = "") {
+  const text = String(value || "");
+  if (!looksLikeHtmlDocument(text)) return false;
+  const lower = text.toLowerCase();
+  return contentType.includes("text/html")
+    || /service suspended|temporarily unavailable|access denied|error 403|error 404|error 500|error 502|error 503|forbidden|unavailable/i.test(lower);
+}
+
+function classifyUnavailableResponse(value) {
+  const text = cleanText(stripHtml(String(value || ""))).toLowerCase();
+  if (/service suspended|temporarily unavailable|error 503|error 502|maintenance|unavailable/.test(text)) {
+    return "Источник временно недоступен.";
+  }
+  if (/access denied|forbidden|error 403/.test(text)) {
+    return "Источник заблокировал запрос.";
+  }
+  if (/not found|error 404/.test(text)) {
+    return "Источник недоступен по этому адресу.";
+  }
+  return "Источник вернул некорректный ответ.";
+}
+
+function isProviderUnavailableError(message) {
+  const text = String(message || "").toLowerCase();
+  return [
+    "источник временно недоступен",
+    "источник заблокировал запрос",
+    "источник недоступен по этому адресу",
+    "источник вернул некорректный ответ",
+    "источник новостей не ответил вовремя",
+    "fetch failed"
+  ].some((part) => text.includes(part));
 }
 
 function toArray(value) {
