@@ -221,7 +221,10 @@ const I18N = {
         loading: "Gathering the feed and reranking sources.",
         score: "score",
         alsoFrom: "Also from",
-        sourceCount: (count) => `${count} sources`
+        sourceCount: (count) => `${count} sources`,
+        topStories: "Top stories",
+        moreStories: "More stories",
+        streamFallback: "Signal"
       },
       share: {
         title: "Share",
@@ -387,7 +390,10 @@ const I18N = {
         loading: "Собираю ленту и пересортировываю источники.",
         score: "оценка",
         alsoFrom: "Еще из",
-        sourceCount: (count) => `${count} источника`
+        sourceCount: (count) => `${count} источника`,
+        topStories: "Главные истории",
+        moreStories: "Еще новости",
+        streamFallback: "Сигнал"
       },
       share: {
         title: "Поделиться",
@@ -553,7 +559,10 @@ const I18N = {
         loading: "Збираю стрічку та перевпорядковую джерела.",
         score: "оцінка",
         alsoFrom: "Ще з",
-        sourceCount: (count) => `${count} джерела`
+        sourceCount: (count) => `${count} джерела`,
+        topStories: "Головні історії",
+        moreStories: "Ще новини",
+        streamFallback: "Сигнал"
       },
       share: {
         title: "Поділитися",
@@ -1120,40 +1129,62 @@ function renderResults(data) {
     return;
   }
 
-  elements.resultsList.innerHTML = clusters.map((cluster, index) => renderCluster(cluster, index === 0)).join("");
+  elements.resultsList.innerHTML = renderStoryStream(clusters);
   bindResultActions();
 }
 
-function renderCluster(cluster, featured = false) {
+function renderStoryStream(clusters) {
+  const lead = clusters.slice(0, 4);
+  const rest = clusters.slice(4);
+
+  const leadSection = lead.length
+    ? `
+      <section class="stream-section">
+        <div class="stream-section-head">
+          <h3>${escapeHtml(currentUi().results.topStories)}</h3>
+        </div>
+        <div class="stream-grid">
+          ${lead.map((cluster, index) => renderStreamCard(cluster, index === 0)).join("")}
+        </div>
+      </section>
+    `
+    : "";
+
+  const restSection = rest.length
+    ? `
+      <section class="story-list-section">
+        <div class="stream-section-head">
+          <h3>${escapeHtml(currentUi().results.moreStories)}</h3>
+        </div>
+        <div class="story-list">
+          ${rest.map(renderStoryListCard).join("")}
+        </div>
+      </section>
+    `
+    : "";
+
+  return `${leadSection}${restSection}`;
+}
+
+function renderStreamCard(cluster, featured = false) {
   const article = cluster.lead;
-  const tags = selectCardTags(article.tags || [])
+  const tags = selectCardTags(article.tags || []).slice(0, 2)
     .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
     .join("");
-  const summary = excerptText(article.summary || article.title, cluster.size > 1 ? 172 : 150);
-  const quality = article.sourceQuality || {};
-  const related = cluster.related
-    .slice(0, 3)
-    .map((item) => `<a class="related-link" href="${escapeAttribute(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.source)}</a>`)
-    .join("");
   const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
-  const sourceChip = escapeHtml(article.provider || article.domain || "Source");
-  const scoreChip = quality.quality ? `<span>${escapeHtml(currentUi().results.score)} ${escapeHtml(String(quality.quality))}</span>` : "";
-  const relatedRow = cluster.related.length
-    ? `<div class="related-strip"><span class="related-label">${escapeHtml(currentUi().results.alsoFrom)}</span><div class="related-links">${related}</div></div>`
+  const meta = [article.domain || article.provider || "Source", relativeTimeFromNow(article.publishedAt)].filter(Boolean).join("  •  ");
+  const summary = excerptText(article.summary || article.title, featured ? 126 : 96);
+  const bg = article.image
+    ? `style="background-image:linear-gradient(180deg, rgba(7, 12, 20, 0.04), rgba(7, 12, 20, 0.78)), url('${escapeAttribute(article.image)}')"`
     : "";
 
   return `
-    <article class="article-card${article.image ? "" : " no-image"}${featured ? " featured" : ""}">
-      <div class="article-content">
-        <div class="article-meta-row">
-          <div class="article-meta">
-            <span>${escapeHtml(article.domain || article.provider || "Источник")}</span>
-            <span>${escapeHtml(article.language || article.provider || "")}</span>
-            <span>${formatDateTime(article.publishedAt)}</span>
-            ${clusterBadge}
-          </div>
+    <article class="stream-card${featured ? " featured" : ""}${article.image ? "" : " no-image"}" ${bg}>
+      <div class="stream-card-overlay">
+        <div class="stream-card-top">
+          ${tags ? `<div class="stream-card-tags">${tags}</div>` : `<div class="stream-card-tags"><span>${escapeHtml(currentUi().results.streamFallback)}</span></div>`}
           <button
-            class="icon-button article-share-button"
+            class="icon-button article-share-button stream-share-button"
             type="button"
             aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
             data-share-article='${escapeAttribute(JSON.stringify({
@@ -1165,18 +1196,50 @@ function renderCluster(cluster, featured = false) {
             <i data-lucide="share-2"></i>
           </button>
         </div>
-        <a class="article-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">
-          ${escapeHtml(article.title)}
-        </a>
-        <p class="article-summary">${escapeHtml(summary)}</p>
-        ${tags ? `<div class="article-tags">${tags}</div>` : ""}
-        <div class="article-footer">
-          <span>${sourceChip}</span>
-          ${scoreChip}
+        <a class="stream-card-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <p class="stream-card-summary">${escapeHtml(summary)}</p>
+        <div class="stream-card-footer">
+          <span>${escapeHtml(meta)}</span>
+          ${clusterBadge}
         </div>
-        ${relatedRow}
       </div>
-      ${article.image ? `<img class="article-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}
+    </article>
+  `;
+}
+
+function renderStoryListCard(cluster) {
+  const article = cluster.lead;
+  const tags = selectCardTags(article.tags || []).slice(0, 2)
+    .map((tag) => `<span>${escapeHtml(translateTag(tag))}</span>`)
+    .join("");
+  const summary = excerptText(article.summary || article.title, 132);
+  const clusterBadge = cluster.size > 1 ? `<span class="story-count">${escapeHtml(currentUi().results.sourceCount(cluster.size))}</span>` : "";
+
+  return `
+    <article class="story-list-card${article.image ? "" : " no-image"}">
+      ${article.image ? `<img class="story-list-image" src="${escapeAttribute(article.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<div class="story-list-image fallback"></div>`}
+      <div class="story-list-content">
+        <div class="story-list-meta">
+          <span>${escapeHtml(article.domain || article.provider || "Source")}</span>
+          <span>${escapeHtml(relativeTimeFromNow(article.publishedAt))}</span>
+          ${clusterBadge}
+        </div>
+        <a class="story-list-title" href="${escapeAttribute(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title)}</a>
+        <p class="story-list-summary">${escapeHtml(summary)}</p>
+        ${tags ? `<div class="story-list-tags">${tags}</div>` : ""}
+      </div>
+      <button
+        class="icon-button article-share-button"
+        type="button"
+        aria-label="${escapeAttribute(currentUi().aria.shareArticle)}"
+        data-share-article='${escapeAttribute(JSON.stringify({
+          title: article.title,
+          url: article.url,
+          provider: article.provider || article.domain || "News Agent"
+        }))}'
+      >
+        <i data-lucide="share-2"></i>
+      </button>
     </article>
   `;
 }
@@ -1185,6 +1248,17 @@ function renderBriefing(lines) {
   elements.briefingLines.innerHTML = lines.length
     ? lines.slice(0, 2).map((line) => `<p>${escapeHtml(line)}</p>`).join("")
     : `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
+}
+
+function relativeTimeFromNow(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return formatDateTime(value);
+  const diffMs = Date.now() - time;
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+  if (diffMin < 60) return state.locale === "ru" ? `${diffMin} мин назад` : state.locale === "uk" ? `${diffMin} хв тому` : `${diffMin} min ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return state.locale === "ru" ? `${diffHr} ч назад` : state.locale === "uk" ? `${diffHr} год тому` : `${diffHr} hr ago`;
+  return formatDateTime(value);
 }
 
 function renderTags(tags) {
