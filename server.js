@@ -25,6 +25,7 @@ const VAPID_KEYS_FILE = path.join(DATA_DIR, "vapid-keys.json");
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_IMAGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const ARTICLE_CONTENT_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+const RELEVANCE_ENRICH_LIMIT = 16;
 const GDELT_DELAY_MS = 5500;
 const ALERT_MONITOR_TICK_MS = 60 * 1000;
 const VISIBLE_STORY_MEDIA_LIMIT = 12;
@@ -659,6 +660,9 @@ async function fetchNews(request) {
     }
   }
 
+  const relevanceCandidates = selectArticlesForDeepRelevance(collected, request);
+  await enrichArticlesForRelevance(relevanceCandidates, request);
+
   const candidatePool = finalizeArticlesForRequest(collected, request).slice(0, request.limit);
   const processed = (await filterUnavailableArticles(candidatePool)).slice(0, request.limit);
   if (!processed.length) {
@@ -1116,7 +1120,7 @@ function sortArticlesForRequest(articles, request) {
 async function enrichArticlesForRelevance(articles, request) {
   if (!needsDeepArticleParsing(request) || !articles.length) return;
 
-  const limit = Math.min(articles.length, Math.max(request.limit, 10));
+  const limit = Math.min(articles.length, RELEVANCE_ENRICH_LIMIT);
   await runWithConcurrency(articles.slice(0, limit), 4, async (article) => {
     const content = await resolveArticleContent(article.url);
     if (!content) return;
@@ -1134,6 +1138,52 @@ function needsDeepArticleParsing(request) {
   if (request.filters?.country) return true;
   if (request.category === "stocks" || request.category === "crypto" || request.category === "technology") return true;
   return false;
+}
+
+function selectArticlesForDeepRelevance(articles, request) {
+  if (!needsDeepArticleParsing(request) || !articles.length) return [];
+
+  const seenUrls = new Set();
+  const seenTitles = new Set();
+
+  return articles
+    .filter((article) => isRecent(article.publishedAt, request.timespan) && articlePassesSoftFilters(article, request))
+    .map((article) => ({
+      article,
+      sourceQuality: inferSourceQuality(article),
+      relevanceScore: scoreArticleForRequest(article, request)
+    }))
+    .sort(compareArticlesByRelevance)
+    .filter(({ article }) => {
+      const urlKey = String(article.url || "").split("?")[0];
+      const titleKey = normalizeTitleKey(article.title);
+      if (!urlKey || !titleKey) return false;
+      if (seenUrls.has(urlKey) || seenTitles.has(titleKey)) return false;
+      seenUrls.add(urlKey);
+      seenTitles.add(titleKey);
+      return true;
+    })
+    .slice(0, RELEVANCE_ENRICH_LIMIT)
+    .map(({ article }) => article);
+}
+
+function articlePassesSoftFilters(article, request) {
+  const filters = request.filters || {};
+  const focus = getEffectiveFocus(request);
+
+  if (filters.language !== "any" && !languageMatches(article, filters.language)) return false;
+  if (filters.sourceType !== "any" && inferSourceQuality(article).tier !== filters.sourceType) return false;
+  if (!sourceAllowed(article, filters)) return false;
+
+  if (focus !== "all" && !articleMatchesFocus(article, focus)) return false;
+
+  if (request.mode === "ticker") return articleHasTickerAnchor(article, request);
+  if (request.mode === "commodity") return commodityMentionStrength(article, request) >= 1;
+  if (request.mode === "custom" && request.parsedQuery?.topicTerms?.length) {
+    return customTopicStrength(article, request) >= 1;
+  }
+
+  return true;
 }
 
 async function enrichArticleImages(articles) {
@@ -1548,7 +1598,7 @@ function articleHasCustomMatch(article, request) {
     return customTopicStrength(article, request) >= 2;
   }
   if (request.parsedQuery?.country) {
-    return countryMentionStrength(article, request.parsedQuery.country) >= 2;
+    return countryMentionStrength(article, request.parsedQuery.country) >= 3;
   }
   return true;
 }
@@ -1716,7 +1766,7 @@ function languageMatches(article, language) {
 }
 
 function articleMatchesCountry(article, country) {
-  return countryMentionStrength(article, country) >= 2;
+  return countryMentionStrength(article, country) >= 3;
 }
 
 function countryMentionStrength(article, country) {
