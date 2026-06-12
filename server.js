@@ -326,6 +326,29 @@ const tickerNoiseTitlePatterns = [
   /\b(raises?|cuts?|lowers?|trims?|boosts?|reduces?)\s+(its\s+)?(position|stake)\b/i
 ];
 
+const commodityNoiseTitlePatterns = [
+  /\bforecast\b/i,
+  /\bprice forecast\b/i,
+  /\bforecast for (today|tomorrow|next week|next 30 days)\b/i,
+  /\bfor today, tomorrow, next week\b/i,
+  /\bnext 30 days\b/i,
+  /\btechnical analysis\b/i,
+  /\belliott wave\b/i,
+  /\btrade ideas\b/i,
+  /\btraders?\b/i,
+  /\bprice prediction\b/i,
+  /\bmarket outlook\b/i,
+  /\bmarket analysis\b/i,
+  /\bhow .* matters\b/i,
+  /\blive price\b/i,
+  /\bsize, trends and insights\b/i
+];
+
+const commodityProxyTitlePatterns = [
+  /\b(etf|stock|stocks|shares|share|equity|equities)\b/i,
+  /\bminers?\b/i
+];
+
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -1202,7 +1225,7 @@ function articlePassesSoftFilters(article, request) {
   if (focus !== "all" && !articleMatchesFocus(article, focus)) return false;
 
   if (request.mode === "ticker") return articleHasTickerAnchor(article, request);
-  if (request.mode === "commodity") return commodityMentionStrength(article, request) >= 1;
+  if (request.mode === "commodity") return articleHasCommodityAnchor(article, request);
   if (request.mode === "custom" && request.parsedQuery?.topicTerms?.length) {
     return customTopicStrength(article, request) >= 1;
   }
@@ -1623,7 +1646,16 @@ function articleHasTickerMatch(article, request) {
 }
 
 function articleHasCommodityMatch(article, request) {
-  return commodityMentionStrength(article, request) >= 2;
+  const matchMode = request.filters?.matchMode || "balanced";
+  const strength = commodityMentionStrength(article, request);
+  const hasAnchor = articleHasCommodityAnchor(article, request);
+  const hasTitleAnchor = articleHasCommodityTitleAnchor(article, request);
+
+  if (!hasAnchor) return false;
+  if (matchMode !== "broad" && isCommodityNoiseArticle(article, request)) return false;
+  if (matchMode === "strict") return hasTitleAnchor && strength >= minCommodityMentionStrength(request);
+  if (matchMode === "balanced") return hasTitleAnchor && strength >= minCommodityMentionStrength(request);
+  return strength >= minCommodityMentionStrength(request);
 }
 
 function articleHasCustomMatch(article, request) {
@@ -1717,17 +1749,57 @@ function hasMultipleTickerSubjects(article, request) {
   return otherSymbols.length >= 2;
 }
 
+function articleHasCommodityAnchor(article, request) {
+  const text = getArticleSearchText(article);
+  return getCommodityIdentityTerms(request).some((term) => matchesNewsTerm(text, term));
+}
+
+function articleHasCommodityTitleAnchor(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  return getCommodityIdentityTerms(request).some((term) => matchesNewsTerm(title, term));
+}
+
+function isCommodityNoiseArticle(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const text = `${title} ${String(article.summary || "").toLowerCase()}`;
+  const hasTitleAnchor = articleHasCommodityTitleAnchor(article, request);
+
+  if (!hasTitleAnchor) return false;
+  if (commodityNoiseTitlePatterns.some((pattern) => pattern.test(text))) return true;
+  if (hasCommodityProxyAssetSignal(article)) return true;
+  return false;
+}
+
+function hasCommodityProxyAssetSignal(article) {
+  const title = String(article.title || "").toLowerCase();
+  return commodityProxyTitlePatterns.some((pattern) => pattern.test(title));
+}
+
 function commodityMentionStrength(article, request) {
   const title = String(article.title || "").toLowerCase();
-  const text = getArticleSearchText(article);
+  const text = getArticleSearchText(article, { includeUrl: true });
   let score = 0;
 
-  for (const term of request.commodityKeywords || []) {
+  const identityTerms = getCommodityIdentityTerms(request);
+  const keywords = request.commodityKeywords || [];
+
+  for (const term of identityTerms) {
     const normalized = cleanText(term).toLowerCase();
     if (!normalized) continue;
+    if (matchesNewsTerm(title, normalized)) score += 8;
+    else if (matchesNewsTerm(text, normalized)) score += 4;
+  }
+
+  for (const term of keywords) {
+    const normalized = cleanText(term).toLowerCase();
+    if (!normalized) continue;
+    if (identityTerms.includes(normalized)) continue;
     if (matchesNewsTerm(title, normalized)) score += 3;
     else if (matchesNewsTerm(text, normalized)) score += 1;
   }
+
+  if ((article.tags || []).includes("сырье")) score += 1;
+  if (isCommodityNoiseArticle(article, request)) score -= 7;
 
   return score;
 }
@@ -1771,6 +1843,28 @@ function minTickerMentionStrength(request) {
   const matchMode = request.filters?.matchMode || "balanced";
   const thresholds = { strict: 11, balanced: 8, broad: 6 };
   return thresholds[matchMode] ?? thresholds.balanced;
+}
+
+function minCommodityMentionStrength(request) {
+  const matchMode = request.filters?.matchMode || "balanced";
+  const thresholds = { strict: 9, balanced: 7, broad: 4 };
+  return thresholds[matchMode] ?? thresholds.balanced;
+}
+
+function getCommodityIdentityTerms(request) {
+  const commodity = String(request.commodity || "").toLowerCase();
+  const primary = {
+    copper: ["copper", "lme copper"],
+    gold: ["gold", "xau"],
+    silver: ["silver"],
+    oil: ["oil", "crude oil", "brent", "wti"],
+    gas: ["natural gas", "lng"],
+    wheat: ["wheat", "grain"],
+    lithium: ["lithium"],
+    uranium: ["uranium"]
+  };
+
+  return primary[commodity] || compactTerms([request.label, request.commodity, ...(request.commodityKeywords || [])]);
 }
 
 function stockMentionStrength(article) {
