@@ -302,6 +302,30 @@ const companyNoiseWords = new Set([
   "ordinary", "common", "shares"
 ]);
 
+const tickerNoiseTitlePatterns = [
+  /^\s*[a-z0-9.-]+\|/i,
+  /\bprice\s*:\s*\d/i,
+  /\bchg%\s*:?\s*[-+]?\d/i,
+  /\blargest position\b/i,
+  /\bhas\s+\$?\d[\d.,\s]*(million|billion|trillion)?\s+stake\b/i,
+  /\bsells?\s+\d[\d,]*\s+shares\b/i,
+  /\bposition increased by\b/i,
+  /\blive share price\b/i,
+  /\bshould you buy\??\b/i,
+  /\bin focus\b/i,
+  /\bhow to play\b/i,
+  /\bholding history\b/i,
+  /\bportfolio\b/i,
+  /\bbest (forever )?stocks? to buy\b/i,
+  /\blagged the market today\b/i,
+  /\banalysts offer insights on .* companies\b/i,
+  /\b(trading up|trading down)\b/i,
+  /\bwhat'?s next\??\b/i,
+  /\bholdings?\s+(raised|cut|lowered|trimmed|boosted|reduced)\b/i,
+  /\b(position|stake)\s+(raised|cut|lowered|trimmed|boosted|reduced)\b/i,
+  /\b(raises?|cuts?|lowers?|trims?|boosts?|reduces?)\s+(its\s+)?(position|stake)\b/i
+];
+
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -1586,7 +1610,16 @@ function articleMatchesFocus(article, focus) {
 }
 
 function articleHasTickerMatch(article, request) {
-  return articleHasTickerAnchor(article, request) && tickerMentionStrength(article, request) >= minTickerMentionStrength(request);
+  const matchMode = request.filters?.matchMode || "balanced";
+  const strength = tickerMentionStrength(article, request);
+  const hasAnchor = articleHasTickerAnchor(article, request);
+  const hasTitleAnchor = articleHasTickerTitleAnchor(article, request);
+
+  if (!hasAnchor) return false;
+  if (matchMode !== "broad" && isTickerNoiseArticle(article, request)) return false;
+  if (matchMode === "strict") return hasTitleAnchor && strength >= minTickerMentionStrength(request);
+  if (matchMode === "balanced") return hasTitleAnchor && strength >= minTickerMentionStrength(request);
+  return strength >= minTickerMentionStrength(request);
 }
 
 function articleHasCommodityMatch(article, request) {
@@ -1632,6 +1665,8 @@ function tickerMentionStrength(article, request) {
   if (textTokenHits >= 2) score += 4;
   else if (textTokenHits === 1 && companyTokens.length === 1) score += 1;
 
+  if (isTickerNoiseArticle(article, request)) score -= 8;
+
   return score;
 }
 
@@ -1646,6 +1681,40 @@ function articleHasTickerAnchor(article, request) {
   if (company && (matchesNewsTerm(title, company) || matchesNewsTerm(text, company))) return true;
   if (companyTokens.length >= 2 && countDistinctTermMatches(text, companyTokens) >= 2) return true;
   return false;
+}
+
+function articleHasTickerTitleAnchor(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const symbol = String(request.tickerSymbol || "").toUpperCase();
+  const company = cleanText(request.company || "").toLowerCase();
+  const companyTokens = getCompanyIdentityTerms(request.company || "");
+
+  if (symbol && matchesTickerSymbol(title, symbol)) return true;
+  if (company && matchesNewsTerm(title, company)) return true;
+  if (companyTokens.length >= 2 && countDistinctTermMatches(title, companyTokens) >= 2) return true;
+  return false;
+}
+
+function isTickerNoiseArticle(article, request) {
+  const title = String(article.title || "").toLowerCase();
+  const text = `${title} ${String(article.summary || "").toLowerCase()}`;
+
+  if (!articleHasTickerTitleAnchor(article, request)) return false;
+  if (tickerNoiseTitlePatterns.some((pattern) => pattern.test(text))) return true;
+  if (hasMultipleTickerSubjects(article, request)) return true;
+  return false;
+}
+
+function hasMultipleTickerSubjects(article, request) {
+  const title = String(article.title || "");
+  const currentSymbol = String(request.tickerSymbol || "").toUpperCase();
+  if (!currentSymbol) return false;
+
+  const matches = title.match(/\b[A-Z]{2,5}\b/g) || [];
+  const unique = [...new Set(matches)];
+  const otherSymbols = unique.filter((symbol) => symbol !== currentSymbol);
+
+  return otherSymbols.length >= 2;
 }
 
 function commodityMentionStrength(article, request) {
