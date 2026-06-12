@@ -307,6 +307,14 @@ const tickerNoiseTitlePatterns = [
   /\bprice\s*:\s*\d/i,
   /\bchg%\s*:?\s*[-+]?\d/i,
   /\blargest position\b/i,
+  /\bmakes? new .*investment in\b/i,
+  /\bacquires? shares of\b/i,
+  /\bboosts? stock position in\b/i,
+  /\blowers? stock position in\b/i,
+  /\breduces? stock position in\b/i,
+  /\braises? stock position in\b/i,
+  /\bincreases? stock position in\b/i,
+  /\bownership in\b/i,
   /\bhas\s+\$?\d[\d.,\s]*(million|billion|trillion)?\s+stake\b/i,
   /\bsells?\s+\d[\d,]*\s+shares\b/i,
   /\bposition increased by\b/i,
@@ -325,6 +333,10 @@ const tickerNoiseTitlePatterns = [
   /\b(position|stake)\s+(raised|cut|lowered|trimmed|boosted|reduced)\b/i,
   /\b(raises?|cuts?|lowers?|trims?|boosts?|reduces?)\s+(its\s+)?(position|stake)\b/i
 ];
+
+const countryQueryExclusions = {
+  usa: ["bank of america", "voice of america", "american airlines"]
+};
 
 const commodityNoiseTitlePatterns = [
   /\bforecast\b/i,
@@ -1229,6 +1241,9 @@ function articlePassesSoftFilters(article, request) {
   if (request.mode === "custom" && request.parsedQuery?.topicTerms?.length) {
     return customTopicStrength(article, request) >= 1;
   }
+  if (request.mode === "custom" && request.parsedQuery?.country && request.parsedQuery?.topicTerms?.length === 0) {
+    return !isCountryFalsePositiveArticle(article, request.parsedQuery.country);
+  }
 
   return true;
 }
@@ -1663,6 +1678,7 @@ function articleHasCustomMatch(article, request) {
     return customTopicStrength(article, request) >= 2;
   }
   if (request.parsedQuery?.country) {
+    if (isCountryFalsePositiveArticle(article, request.parsedQuery.country)) return false;
     return countryMentionStrength(article, request.parsedQuery.country) >= 3;
   }
   return true;
@@ -1818,6 +1834,14 @@ function customTopicStrength(article, request) {
   }
 
   return score;
+}
+
+function isCountryFalsePositiveArticle(article, country) {
+  const patterns = countryQueryExclusions[String(country || "").toLowerCase()] || [];
+  if (!patterns.length) return false;
+
+  const text = `${String(article.title || "")} ${String(article.summary || "")}`.toLowerCase();
+  return patterns.some((term) => matchesNewsTerm(text, term));
 }
 
 function getCompanyIdentityTerms(company) {
@@ -2694,6 +2718,7 @@ function parseCustomQuery(rawQuery) {
   const focus = detectCustomQueryFocus(normalized, topicTerms);
   if (country && topicTerms.length === 0) {
     excludeTerms.push("sport", "sports", "football", "soccer", "hockey", "basketball");
+    excludeTerms.push(...(countryQueryExclusions[country] || []));
   }
   const searchQuery = cleanText(
     [
