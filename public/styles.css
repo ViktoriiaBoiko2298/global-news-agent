@@ -3279,9 +3279,14 @@ select {
 
 .editorial-story-share {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 20px;
+  right: 20px;
   z-index: 3;
+}
+
+.editorial-story-share.editorial-share-button {
+  width: 34px;
+  min-height: 34px;
 }
 
 .editorial-hero-media,
@@ -3313,6 +3318,11 @@ select {
 
 .editorial-hero-media .editorial-media-shell {
   padding: 30px;
+}
+
+.editorial-media-topline {
+  min-height: 34px;
+  padding-right: 64px;
 }
 
 .editorial-media-title-stack {
@@ -3410,8 +3420,8 @@ select {
 
 @media (max-width: 900px) {
   .editorial-story-share {
-    top: 14px;
-    right: 14px;
+    top: 16px;
+    right: 16px;
   }
 
   .editorial-hero-media,
@@ -3440,6 +3450,10 @@ select {
 
   .editorial-media-summary {
     font-size: 15px;
+  }
+
+  .editorial-media-topline {
+    padding-right: 56px;
   }
 
   .editorial-feed-card .editorial-feed-media,
