@@ -57,7 +57,7 @@ const commodityPresets = {
   },
   gold: {
     label: "Золото",
-    query: '(gold OR "gold prices" OR "gold futures" OR "central bank gold" OR "safe haven gold")'
+    query: '(gold OR XAU OR bullion OR "gold prices" OR "gold futures" OR "central bank gold" OR "gold reserves" OR "safe haven gold" OR "spot gold")'
   },
   silver: {
     label: "Серебро",
@@ -112,8 +112,8 @@ const worldCategoryPresets = {
     label: "Экономика",
     topics: ["BUSINESS", "WORLD"],
     query:
-      '(economy OR markets OR inflation OR "central bank" OR rates OR trade OR business OR jobs OR GDP)',
-    googleQuery: "economy OR markets OR inflation OR central bank OR business"
+      '(economy OR inflation OR CPI OR GDP OR jobs OR unemployment OR payrolls OR "central bank" OR "interest rates" OR Fed OR ECB OR tariffs OR trade OR exports OR imports OR "bond yields" OR recession OR growth)',
+    googleQuery: 'economy OR inflation OR GDP OR jobs OR "central bank" OR "interest rates" OR Fed OR ECB OR tariffs OR trade'
   },
   stocks: {
     label: "Сток маркет",
@@ -156,7 +156,7 @@ const sourcePresets = {
 
 const commodityKeywords = {
   copper: ["copper", "lme copper", "copper futures", "copper mine"],
-  gold: ["gold", "xau", "gold futures", "central bank gold"],
+  gold: ["gold", "xau", "bullion", "gold futures", "central bank gold", "gold reserves", "spot gold"],
   silver: ["silver", "silver futures"],
   oil: ["oil", "crude", "brent", "wti", "opec"],
   gas: ["natural gas", "lng", "gas prices"],
@@ -278,6 +278,39 @@ const stockMarketTerms = [
   "dividend", "market cap", "nasdaq", "nyse", "s&p 500", "dow jones", "russell 2000",
   "premarket", "pre-market", "after-hours", "after hours", "trading", "ticker", "etf",
   "otc", "listed", "listing", "warrant", "warrants"
+];
+
+const macroEconomyTerms = [
+  "economy", "economic", "inflation", "deflation", "cpi", "ppi", "gdp", "recession", "growth",
+  "jobs", "jobless", "unemployment", "labor market", "payrolls", "wages", "consumer spending",
+  "retail sales", "industrial production", "manufacturing", "pmi", "central bank", "interest rates",
+  "rate cut", "rate hike", "fed", "ecb", "bank of england", "treasury yields", "bond yields",
+  "tariff", "tariffs", "trade", "exports", "imports", "housing market", "fiscal", "budget deficit"
+];
+
+const goldMarketTerms = [
+  "gold", "xau", "bullion", "spot gold", "gold prices", "gold futures", "gold reserves",
+  "central bank gold", "reserve asset", "safe haven", "ounce"
+];
+
+const exportControlTerms = [
+  "export", "exports", "export control", "export controls", "restriction", "restrictions", "restrict",
+  "restricted", "ban", "bans", "curb", "curbs", "licensing", "license", "licenses", "sanction", "sanctions"
+];
+
+const aiChipTerms = [
+  "ai", "artificial intelligence", "chip", "chips", "semiconductor", "semiconductors", "gpu", "gpus", "nvidia"
+];
+
+const goldProxyTerms = [
+  "gold miner", "gold miners", "gold mining", "mining stock", "producer", "producers", "royalty", "streaming"
+];
+
+const customIntentNoiseTitlePatterns = [
+  /\btop news today\b/i,
+  /\bnews roundup\b/i,
+  /\b& more\b/i,
+  /\bmorning news\b/i
 ];
 
 const personalFinanceTerms = [
@@ -913,7 +946,13 @@ function getWorldPriority(article, category) {
 
   if (category === "politics") return tags.has("политика") || tags.has("геополитика") ? 3 : 1;
   if (category === "ordinary") return tags.has("политика") || tags.has("геополитика") ? 0 : 2;
-  if (category === "economy") return tags.has("экономика") || tags.has("рынки") || tags.has("макро") ? 3 : 1;
+  if (category === "economy") {
+    const strength = economyMentionStrength(article);
+    if (strength >= 10) return 6;
+    if (strength >= 7) return 4;
+    if (strength >= 4) return 2;
+    return 0;
+  }
   if (category === "stocks") {
     const strength = stockMentionStrength(article);
     if (strength >= 8) return 6;
@@ -1064,7 +1103,7 @@ function articleMatchesRequest(article, request) {
   if (request.mode === "world") {
     if (request.category === "politics" && !(tags.has("политика") || tags.has("геополитика"))) return false;
     if (request.category === "ordinary" && (tags.has("политика") || tags.has("геополитика"))) return false;
-    if (request.category === "economy" && !(tags.has("экономика") || tags.has("рынки") || tags.has("макро"))) return false;
+    if (request.category === "economy" && !isMacroEconomyArticle(article)) return false;
     if (request.category === "stocks" && !isStockMarketArticle(article)) return false;
     if (request.category === "crypto" && !tags.has("крипта")) return false;
     if (request.category === "technology" && !(tags.has("технологии") || tags.has("наука"))) return false;
@@ -1239,6 +1278,7 @@ function articlePassesSoftFilters(article, request) {
   if (request.mode === "ticker") return articleHasTickerAnchor(article, request);
   if (request.mode === "commodity") return articleHasCommodityAnchor(article, request);
   if (request.mode === "custom" && request.parsedQuery?.topicTerms?.length) {
+    if (!articleMatchesCustomIntent(article, request)) return false;
     return customTopicStrength(article, request) >= 1;
   }
   if (request.mode === "custom" && request.parsedQuery?.country && request.parsedQuery?.topicTerms?.length === 0) {
@@ -1587,6 +1627,7 @@ function scoreArticleForRequest(article, request) {
   const requestCountry = request.filters?.country || request.parsedQuery?.country || "";
   const countryStrength = requestCountry ? countryMentionStrength(article, requestCountry) : 0;
   const focus = getEffectiveFocus(request);
+  const economyStrength = economyMentionStrength(article);
   let score = Math.round(quality / 25);
 
   for (const term of getRequestTerms(request)) {
@@ -1624,9 +1665,16 @@ function scoreArticleForRequest(article, request) {
   if (focus !== "all" && articleMatchesFocus(article, focus)) score += 4;
   if (request.mode === "ticker") score += tickerMentionStrength(article, request);
   if (request.mode === "commodity") score += commodityMentionStrength(article, request);
-  if (request.mode === "custom") score += customTopicStrength(article, request);
+  if (request.mode === "custom") {
+    score += customTopicStrength(article, request);
+    if (articleMatchesCustomIntent(article, request)) score += 4;
+  }
   if (request.mode === "world" && request.category === "stocks") {
     score += stockMentionStrength(article);
+  }
+  if (request.mode === "world" && request.category === "economy") {
+    score += economyStrength;
+    if (isCompanyCentricArticle(article) && economyStrength < 6) score -= 5;
   }
   if (request.mode === "world") score += getWorldPriority(article, request.category || "all");
 
@@ -1675,6 +1723,7 @@ function articleHasCommodityMatch(article, request) {
 
 function articleHasCustomMatch(article, request) {
   if (request.parsedQuery?.topicTerms?.length) {
+    if (!articleMatchesCustomIntent(article, request)) return false;
     return customTopicStrength(article, request) >= 2;
   }
   if (request.parsedQuery?.country) {
@@ -1782,13 +1831,25 @@ function isCommodityNoiseArticle(article, request) {
 
   if (!hasTitleAnchor) return false;
   if (commodityNoiseTitlePatterns.some((pattern) => pattern.test(text))) return true;
-  if (hasCommodityProxyAssetSignal(article)) return true;
+  if (hasCommodityProxyAssetSignal(article, request)) return true;
   return false;
 }
 
-function hasCommodityProxyAssetSignal(article) {
+function hasCommodityProxyAssetSignal(article, request) {
   const title = String(article.title || "").toLowerCase();
-  return commodityProxyTitlePatterns.some((pattern) => pattern.test(title));
+  if (commodityProxyTitlePatterns.some((pattern) => pattern.test(title))) return true;
+
+  if (String(request.commodity || "").toLowerCase() === "gold") {
+    const hasProxy = goldProxyTerms.some((term) => matchesNewsTerm(title, term));
+    return hasProxy && !hasGoldDirectMarketSignal(article);
+  }
+
+  return false;
+}
+
+function hasGoldDirectMarketSignal(article) {
+  const title = String(article.title || "").toLowerCase();
+  return goldMarketTerms.some((term) => matchesNewsTerm(title, term));
 }
 
 function commodityMentionStrength(article, request) {
@@ -1836,6 +1897,28 @@ function customTopicStrength(article, request) {
   return score;
 }
 
+function articleMatchesCustomIntent(article, request) {
+  const buckets = getCustomIntentBuckets(request);
+  if (!buckets.length) return true;
+
+  const title = String(article.title || "").toLowerCase();
+  if (customIntentNoiseTitlePatterns.some((pattern) => pattern.test(title))) return false;
+
+  const text = getArticleSearchText(article);
+  return buckets.every((bucket) => bucket.some((term) => matchesNewsTerm(text, term)));
+}
+
+function getCustomIntentBuckets(request) {
+  const text = `${request.query || ""} ${request.googleQuery || ""}`.toLowerCase();
+  const buckets = [];
+
+  if (aiChipTerms.some((term) => matchesNewsTerm(text, term)) && exportControlTerms.some((term) => matchesNewsTerm(text, term))) {
+    buckets.push(aiChipTerms, exportControlTerms);
+  }
+
+  return buckets;
+}
+
 function isCountryFalsePositiveArticle(article, country) {
   const patterns = countryQueryExclusions[String(country || "").toLowerCase()] || [];
   if (!patterns.length) return false;
@@ -1879,7 +1962,7 @@ function getCommodityIdentityTerms(request) {
   const commodity = String(request.commodity || "").toLowerCase();
   const primary = {
     copper: ["copper", "lme copper"],
-    gold: ["gold", "xau"],
+    gold: ["gold", "xau", "bullion", "spot gold"],
     silver: ["silver"],
     oil: ["oil", "crude oil", "brent", "wti"],
     gas: ["natural gas", "lng"],
@@ -1908,6 +1991,40 @@ function stockMentionStrength(article) {
   if ((article.tags || []).includes("крипта")) score -= 2;
 
   return score;
+}
+
+function economyMentionStrength(article) {
+  const title = String(article.title || "").toLowerCase();
+  const text = getArticleSearchText(article);
+  const tags = new Set(article.tags || []);
+  let score = 0;
+
+  for (const term of macroEconomyTerms) {
+    if (matchesNewsTerm(title, term)) score += 3;
+    else if (matchesNewsTerm(text, term)) score += 1;
+  }
+
+  if (tags.has("экономика")) score += 4;
+  if (tags.has("макро")) score += 3;
+  if (tags.has("рынки")) score += 1;
+  if (tags.has("акции")) score -= 1;
+
+  return score;
+}
+
+function isMacroEconomyArticle(article) {
+  const strength = economyMentionStrength(article);
+  const tags = new Set(article.tags || []);
+
+  if (strength >= 8) return true;
+  if ((tags.has("экономика") || tags.has("макро")) && strength >= 4) return true;
+  if (tags.has("рынки") && strength >= 5) return true;
+  return false;
+}
+
+function isCompanyCentricArticle(article) {
+  const title = String(article.title || "").toLowerCase();
+  return stockMarketTerms.some((term) => matchesNewsTerm(title, term));
 }
 
 function hasStockTitleSignal(article) {
