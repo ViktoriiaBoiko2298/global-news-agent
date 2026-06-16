@@ -1183,7 +1183,7 @@ function renderStoryTextPanel(article, variant = "hero") {
   const primaryTag = translateTag(tags[0] || currentUi().results.topStories);
   const secondaryTag = article.domain || article.provider || "Source";
   const timeLabel = relativeTimeFromNow(article.publishedAt);
-  const summary = cleanText(article.summary || "");
+  const summary = sanitizeArticleSummary(article.summary || "");
   const panelClass =
     variant === "hero" ? "editorial-hero-media" : variant === "side" ? "editorial-side-media" : "editorial-feed-media";
   const toneClass = getStoryPanelToneClass(tags);
@@ -1210,6 +1210,15 @@ function renderStoryTextPanel(article, variant = "hero") {
       </div>
     </div>
   `;
+}
+
+function sanitizeArticleSummary(value) {
+  const text = cleanText(String(value || ""))
+    .replace(/See more headlines\s*&\s*perspectives on Google News\.?/gi, "")
+    .replace(/Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?/gi, "")
+    .replace(/Full coverage of the latest news, gathered from sources around the world by Google News\.?/gi, "")
+    .trim();
+  return text;
 }
 
 function splitHeadlineForPanel(title, maxLines = 3) {

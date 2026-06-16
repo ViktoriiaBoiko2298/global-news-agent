@@ -3101,6 +3101,8 @@ function normalizeArticleSummary(value, title = "") {
     .replace(/\s{2,}/g, " ")
     .trim();
 
+  text = stripGoogleNewsBoilerplate(text);
+
   text = text.replace(/^(?:Reuters|BBC|CNN|AP News|The New York Times|New York Times|Washington Post|Bloomberg|CNBC|ABC News|CBS News|MarketWatch|Yahoo Finance|Fox News|NPR|Politico|Haaretz|Jerusalem Post|DW)\b[\s:,-]*/i, "").trim();
 
   if (looksNoisySummary(text)) return "";
@@ -3115,8 +3117,19 @@ function normalizeArticleSummary(value, title = "") {
 }
 
 function looksNoisySummary(text) {
+  if (!text) return true;
+  if (!stripGoogleNewsBoilerplate(text)) return true;
   const sourceMatches = String(text || "").match(/\b(?:Reuters|BBC|CNN|AP News|The New York Times|New York Times|Washington Post|Bloomberg|CNBC|ABC News|CBS News|MarketWatch|Yahoo Finance|Fox News|NPR|Politico|Haaretz|Jerusalem Post|DW)\b/gi) || [];
   return sourceMatches.length >= 2;
+}
+
+function stripGoogleNewsBoilerplate(text) {
+  return cleanText(
+    String(text || "")
+      .replace(/See more headlines\s*&\s*perspectives on Google News\.?/gi, "")
+      .replace(/Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?/gi, "")
+      .replace(/Full coverage of the latest news, gathered from sources around the world by Google News\.?/gi, "")
+  );
 }
 
 function extractFeedImage(item, baseUrl = "", html = "") {
