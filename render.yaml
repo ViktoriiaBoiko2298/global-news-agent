@@ -11,6 +11,8 @@ services:
         value: production
       - key: NODE_VERSION
         value: 22
+      - key: PUBLIC_BASE_URL
+        value: https://global-news-agent.onrender.com
       - key: NEWS_AGENT_DATA_DIR
         value: /var/data/news-agent
       - key: WEB_PUSH_PUBLIC_KEY

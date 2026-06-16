@@ -3,8 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f1728" />
-    <title>News Agent</title>
+    <meta name="theme-color" content="#4f6bff" />
+    <title>News Agent | Global News Radar</title>
+    <meta
+      name="description"
+      content="News Agent tracks world news, company tickers, commodities, macro themes, and custom queries with alerts, relevance filters, and shareable searches."
+    />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="__CANONICAL_URL__" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="News Agent" />
+    <meta property="og:title" content="News Agent | Global News Radar" />
+    <meta
+      property="og:description"
+      content="Track world events, equities, crypto, commodities, and company signals in one fast editorial news workspace."
+    />
+    <meta property="og:url" content="__CANONICAL_URL__" />
+    <meta property="og:image" content="__OG_IMAGE_URL__" />
+    <meta property="og:image:alt" content="News Agent editorial interface preview" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="News Agent | Global News Radar" />
+    <meta
+      name="twitter:description"
+      content="Track world events, equities, crypto, commodities, and company signals in one fast editorial news workspace."
+    />
+    <meta name="twitter:image" content="__OG_IMAGE_URL__" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,7 +37,8 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script type="application/ld+json" nonce="__CSP_NONCE__">__WEBAPP_JSON_LD__</script>
+    <script src="/vendor/lucide.min.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -296,6 +321,12 @@
               <strong id="matchName">Balanced</strong>
             </div>
           </div>
+          <section class="briefing-panel" aria-label="Briefing">
+            <h2>Briefing</h2>
+            <div class="briefing-lines" id="briefingLines">
+              <p>A short summary will appear after the first search.</p>
+            </div>
+          </section>
           <div class="message" id="message" hidden></div>
           <div class="results-list" id="resultsList"></div>
         </section>

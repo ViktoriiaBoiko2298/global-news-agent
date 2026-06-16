@@ -4,18 +4,51 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { XMLParser } from "fast-xml-parser";
 import webpush from "web-push";
+import { applyHttpDefaults } from "./config/http.js";
+import {
+  commodityPresets,
+  focusPresets,
+  languagePresets,
+  matchModePresets,
+  sortModePresets,
+  sourcePresets,
+  sourceTypePresets,
+  worldCategoryPresets
+} from "./config/presets.js";
+import {
+  aiChipTerms,
+  commodityNoiseTitlePatterns,
+  commodityProxyTitlePatterns,
+  companyNoiseWords,
+  countryLexicon,
+  countryQueryExclusions,
+  customIntentNoiseTitlePatterns,
+  customQueryFocusLexicon,
+  exportControlTerms,
+  goldMarketTerms,
+  goldProxyTerms,
+  macroEconomyTerms,
+  personalFinanceTerms,
+  sourceProfiles,
+  stockMarketTerms,
+  tickerNoiseTitlePatterns
+} from "./config/search-signals.js";
+import { readJsonOr, writeJsonAtomic } from "./lib/json-store.js";
+import { compactTerms, matchesNewsTerm, splitSearchTerms } from "./lib/query-utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+const PUBLIC_DIR = path.join(__dirname, "public");
 const GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc";
 const GOOGLE_NEWS_RSS = "https://news.google.com/rss/search";
 const GOOGLE_TOP_RSS = "https://news.google.com/rss";
 const GOOGLE_TOPIC_RSS = "https://news.google.com/rss/headlines/section/topic";
 const GOOGLE_NEWS_BATCH_URL = "https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je";
 const DATA_DIR = path.resolve(process.env.NEWS_AGENT_DATA_DIR || path.join(__dirname, "data"));
+const PUBLIC_BASE_URL = normalizePublicBaseUrl(process.env.PUBLIC_BASE_URL || "");
 const WATCHLIST_FILE = path.join(DATA_DIR, "watchlist.json");
 const SEARCH_HISTORY_FILE = path.join(DATA_DIR, "search-history.json");
 const ALERTS_FILE = path.join(DATA_DIR, "alerts.json");
@@ -32,6 +65,8 @@ const VISIBLE_STORY_MEDIA_LIMIT = 12;
 const REQUEST_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 const EMPTY_IMAGE_CACHE_TTL_MS = 15 * 60 * 1000;
+const INDEX_TEMPLATE_FILE = path.join(PUBLIC_DIR, "index.html");
+const DEFAULT_SOCIAL_IMAGE_PATH = "/mockups/concept-4-visual-story-stream.png";
 
 const cache = new Map();
 const tickerCache = new Map();
@@ -43,116 +78,13 @@ let gdeltQueue = Promise.resolve();
 let gdeltNextAt = 0;
 let alertMonitorRunning = false;
 let vapidConfigPromise = null;
+let indexTemplateCache = { mtimeMs: 0, contents: "" };
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   textNodeName: "text"
 });
-
-const commodityPresets = {
-  copper: {
-    label: "Медь",
-    query: '(copper OR "copper prices" OR "LME copper" OR "copper futures" OR "copper mine")'
-  },
-  gold: {
-    label: "Золото",
-    query: '(gold OR XAU OR bullion OR "gold prices" OR "gold futures" OR "central bank gold" OR "gold reserves" OR "safe haven gold" OR "spot gold")'
-  },
-  silver: {
-    label: "Серебро",
-    query: '(silver OR "silver prices" OR "silver futures" OR "industrial silver")'
-  },
-  oil: {
-    label: "Нефть",
-    query: '(oil OR "crude oil" OR Brent OR WTI OR OPEC OR "oil prices")'
-  },
-  gas: {
-    label: "Газ",
-    query: '("natural gas" OR LNG OR "gas prices" OR "European gas" OR "gas storage")'
-  },
-  wheat: {
-    label: "Пшеница",
-    query: '(wheat OR "wheat prices" OR grain OR "grain exports" OR "Black Sea grain")'
-  },
-  lithium: {
-    label: "Литий",
-    query: '(lithium OR "lithium prices" OR "battery metals" OR "lithium mine")'
-  },
-  uranium: {
-    label: "Уран",
-    query: '(uranium OR "uranium prices" OR nuclear OR "uranium mine" OR "nuclear fuel")'
-  }
-};
-
-const worldCategoryPresets = {
-  all: {
-    label: "Политика + обычные",
-    topics: ["TOP", "WORLD", "NATION", "BUSINESS", "TECHNOLOGY", "SCIENCE", "HEALTH", "ENTERTAINMENT", "SPORTS"],
-    query:
-      '(politics OR election OR government OR parliament OR diplomacy OR "world news" OR economy OR markets OR technology OR health OR science OR sports OR culture OR entertainment OR weather OR travel)',
-    googleQuery:
-      "politics OR election OR government OR economy OR technology OR health OR science OR sports OR entertainment"
-  },
-  politics: {
-    label: "Политика",
-    topics: ["WORLD", "NATION"],
-    query:
-      '(politics OR election OR government OR parliament OR president OR diplomacy OR sanctions OR conflict OR "foreign policy" OR minister)',
-    googleQuery: "politics OR election OR government OR parliament OR diplomacy"
-  },
-  ordinary: {
-    label: "Обычные новости",
-    topics: ["TOP", "HEALTH", "SCIENCE", "TECHNOLOGY", "ENTERTAINMENT", "SPORTS"],
-    query:
-      '("top stories" OR health OR science OR technology OR sports OR culture OR entertainment OR weather OR travel OR education OR lifestyle)',
-    googleQuery: "top stories OR health OR science OR technology OR sports OR entertainment"
-  },
-  economy: {
-    label: "Экономика",
-    topics: ["BUSINESS", "WORLD"],
-    query:
-      '(economy OR inflation OR CPI OR GDP OR jobs OR unemployment OR payrolls OR "central bank" OR "interest rates" OR Fed OR ECB OR tariffs OR trade OR exports OR imports OR "bond yields" OR recession OR growth)',
-    googleQuery: 'economy OR inflation OR GDP OR jobs OR "central bank" OR "interest rates" OR Fed OR ECB OR tariffs OR trade'
-  },
-  stocks: {
-    label: "Сток маркет",
-    topics: ["BUSINESS", "TECHNOLOGY", "WORLD"],
-    query:
-      '("stock market" OR stocks OR equities OR shares OR nasdaq OR nyse OR s&p 500 OR dow OR earnings OR analysts OR "market rally" OR "market selloff")',
-    googleQuery: "\"stock market\" OR stocks OR equities OR earnings OR nasdaq OR nyse"
-  },
-  crypto: {
-    label: "Крипта",
-    topics: ["BUSINESS", "TECHNOLOGY", "WORLD"],
-    query:
-      '(crypto OR cryptocurrency OR bitcoin OR btc OR ethereum OR eth OR solana OR stablecoin OR blockchain OR "digital assets" OR "crypto market")',
-    googleQuery: "crypto OR bitcoin OR ethereum OR stablecoin OR blockchain"
-  },
-  technology: {
-    label: "Технологии",
-    topics: ["TECHNOLOGY", "SCIENCE", "BUSINESS"],
-    query:
-      '(technology OR AI OR chips OR software OR cybersecurity OR science OR startup OR "electric vehicles")',
-    googleQuery: "technology OR AI OR chips OR cybersecurity OR science"
-  }
-};
-
-const sourcePresets = {
-  auto: "Google News",
-  google: "Google News",
-  feeds: "Популярные сайты США",
-  stocktitan: "Stock Titan",
-  yahoo: "Yahoo Finance",
-  investing: "Investing.com",
-  benzinga: "Benzinga",
-  cnbc: "CNBC",
-  marketwatch: "MarketWatch",
-  nytimes: "NYTimes",
-  npr: "NPR",
-  fox: "Fox News",
-  gdelt: "GDELT"
-};
 
 const commodityKeywords = {
   copper: ["copper", "lme copper", "copper futures", "copper mine"],
@@ -163,61 +95,6 @@ const commodityKeywords = {
   wheat: ["wheat", "grain", "grain exports"],
   lithium: ["lithium", "battery metals"],
   uranium: ["uranium", "nuclear fuel"]
-};
-
-const focusPresets = {
-  all: "Все темы",
-  politics: "Политика",
-  markets: "Рынки",
-  stocks: "Сток маркет",
-  crypto: "Крипта",
-  companies: "Компании",
-  commodities: "Сырье",
-  tech: "Технологии",
-  science: "Наука и здоровье"
-};
-
-const languagePresets = {
-  any: "Любой язык",
-  english: "English",
-  russian: "Русский"
-};
-
-const sourceTypePresets = {
-  any: "Все источники",
-  major: "Крупные медиа",
-  market: "Рынки и финансы",
-  specialist: "Нишевые источники"
-};
-
-const sortModePresets = {
-  relevance: "По релевантности",
-  newest: "Сначала новые",
-  quality: "Сначала сильные источники"
-};
-
-const matchModePresets = {
-  balanced: "Баланс",
-  strict: "Строго",
-  broad: "Шире"
-};
-
-const countryLexicon = {
-  canada: ["canada", "canadian", "канада", "канада", "ottawa", "ontario", "toronto", "quebec"],
-  usa: ["united states", "u.s.", "u.s", "usa", "america", "american", "сша", "америка", "америки", "американский", "американские", "washington"],
-  uk: ["united kingdom", "britain", "british", "uk", "англия", "британия", "london", "england"],
-  eu: ["european union", "eu", "europe", "евросоюз", "европа", "brussels"],
-  china: ["china", "chinese", "китай", "китайский", "beijing"],
-  india: ["india", "indian", "индия", "индийский", "new delhi"],
-  japan: ["japan", "japanese", "япония", "японский", "tokyo"],
-  ukraine: ["ukraine", "ukrainian", "украина", "украинский", "kyiv", "kiev"],
-  russia: ["russia", "russian", "россия", "российский", "moscow"],
-  israel: ["israel", "israeli", "израиль", "израильский", "tel aviv", "jerusalem"],
-  iran: ["iran", "iranian", "иран", "иранский", "tehran"],
-  germany: ["germany", "german", "германия", "немецкий", "berlin"],
-  france: ["france", "french", "франция", "французский", "paris"],
-  mexico: ["mexico", "mexican", "мексика", "мексиканский", "mexico city"],
-  australia: ["australia", "australian", "австралия", "австралийский", "sydney", "canberra"]
 };
 
 const countryPrimaryTerms = {
@@ -251,151 +128,7 @@ const googleNewsRegions = {
   ukraine: { hl: "en-UA", gl: "UA", ceid: "UA:en" }
 };
 
-const sourceProfiles = {
-  "google news": { tier: "major", type: "aggregator", quality: 80 },
-  "stock titan": { tier: "market", type: "news-feed", quality: 76 },
-  "yahoo finance": { tier: "market", type: "finance", quality: 74 },
-  "investing.com": { tier: "market", type: "finance", quality: 72 },
-  benzinga: { tier: "market", type: "market-blog", quality: 70 },
-  cnbc: { tier: "major", type: "business-tv", quality: 82 },
-  marketwatch: { tier: "market", type: "financial-media", quality: 80 },
-  nytimes: { tier: "major", type: "newspaper", quality: 88 },
-  "the new york times": { tier: "major", type: "newspaper", quality: 88 },
-  npr: { tier: "major", type: "public-media", quality: 85 },
-  "fox news": { tier: "major", type: "cable-news", quality: 76 },
-  "the washington post": { tier: "major", type: "newspaper", quality: 87 },
-  wsj: { tier: "major", type: "business-press", quality: 89 },
-  reuters: { tier: "major", type: "wire", quality: 92 },
-  bloomberg: { tier: "major", type: "financial-wire", quality: 90 },
-  bbc: { tier: "major", type: "public-media", quality: 88 },
-  gdelt: { tier: "specialist", type: "dataset", quality: 65 }
-};
-
-const stockMarketTerms = [
-  "stock", "stocks", "equity", "equities", "shares", "share price", "stock price",
-  "earnings", "revenue", "guidance", "analyst", "analysts", "upgrade", "downgrade",
-  "price target", "buyback", "share repurchase", "ipo", "secondary offering",
-  "dividend", "market cap", "nasdaq", "nyse", "s&p 500", "dow jones", "russell 2000",
-  "premarket", "pre-market", "after-hours", "after hours", "trading", "ticker", "etf",
-  "otc", "listed", "listing", "warrant", "warrants"
-];
-
-const macroEconomyTerms = [
-  "economy", "economic", "inflation", "deflation", "cpi", "ppi", "gdp", "recession", "growth",
-  "jobs", "jobless", "unemployment", "labor market", "payrolls", "wages", "consumer spending",
-  "retail sales", "industrial production", "manufacturing", "pmi", "central bank", "interest rates",
-  "rate cut", "rate hike", "fed", "ecb", "bank of england", "treasury yields", "bond yields",
-  "tariff", "tariffs", "trade", "exports", "imports", "housing market", "fiscal", "budget deficit"
-];
-
-const goldMarketTerms = [
-  "gold", "xau", "bullion", "spot gold", "gold prices", "gold futures", "gold reserves",
-  "central bank gold", "reserve asset", "safe haven", "ounce"
-];
-
-const exportControlTerms = [
-  "export", "exports", "export control", "export controls", "restriction", "restrictions", "restrict",
-  "restricted", "ban", "bans", "curb", "curbs", "licensing", "license", "licenses", "sanction", "sanctions"
-];
-
-const aiChipTerms = [
-  "ai", "artificial intelligence", "chip", "chips", "semiconductor", "semiconductors", "gpu", "gpus", "nvidia"
-];
-
-const goldProxyTerms = [
-  "gold miner", "gold miners", "gold mining", "mining stock", "producer", "producers", "royalty", "streaming"
-];
-
-const customIntentNoiseTitlePatterns = [
-  /\btop news today\b/i,
-  /\bnews roundup\b/i,
-  /\b& more\b/i,
-  /\bmorning news\b/i
-];
-
-const personalFinanceTerms = [
-  "savings account", "retirement", "401(k", "401k", "debt", "mortgage", "credit card",
-  "budget", "emergency fund", "student loan", "financial advisor", "high-yield savings",
-  "hysa", "paycheck", "college", "tuition"
-];
-
-const customQueryFocusLexicon = {
-  politics: ["politics", "political", "election", "government", "diplomacy", "sanctions", "parliament"],
-  markets: ["market", "markets", "macro", "economy", "inflation", "rates", "fed", "ecb", "central bank"],
-  stocks: ["stock", "stocks", "stock market", "equities", "shares", "earnings", "nasdaq", "nyse", "s&p"],
-  crypto: ["crypto", "bitcoin", "ethereum", "solana", "stablecoin", "blockchain", "btc", "eth"],
-  commodities: ["gold", "silver", "copper", "oil", "gas", "wheat", "uranium", "lithium", "commodities", "metal"],
-  tech: ["technology", "tech", "ai", "chips", "software", "cybersecurity", "semiconductor"],
-  science: ["science", "health", "medicine", "research", "vaccine"]
-};
-
-const companyNoiseWords = new Set([
-  "inc", "inc.", "corp", "corp.", "corporation", "company", "co", "co.", "group", "holdings",
-  "holding", "ltd", "ltd.", "limited", "plc", "llc", "sa", "ag", "nv", "the", "and", "class",
-  "ordinary", "common", "shares"
-]);
-
-const tickerNoiseTitlePatterns = [
-  /^\s*[a-z0-9.-]+\|/i,
-  /\bprice\s*:\s*\d/i,
-  /\bchg%\s*:?\s*[-+]?\d/i,
-  /\blargest position\b/i,
-  /\bmakes? new .*investment in\b/i,
-  /\bacquires? shares of\b/i,
-  /\bboosts? stock position in\b/i,
-  /\blowers? stock position in\b/i,
-  /\breduces? stock position in\b/i,
-  /\braises? stock position in\b/i,
-  /\bincreases? stock position in\b/i,
-  /\bownership in\b/i,
-  /\bhas\s+\$?\d[\d.,\s]*(million|billion|trillion)?\s+stake\b/i,
-  /\bsells?\s+\d[\d,]*\s+shares\b/i,
-  /\bposition increased by\b/i,
-  /\blive share price\b/i,
-  /\bshould you buy\??\b/i,
-  /\bin focus\b/i,
-  /\bhow to play\b/i,
-  /\bholding history\b/i,
-  /\bportfolio\b/i,
-  /\bbest (forever )?stocks? to buy\b/i,
-  /\blagged the market today\b/i,
-  /\banalysts offer insights on .* companies\b/i,
-  /\b(trading up|trading down)\b/i,
-  /\bwhat'?s next\??\b/i,
-  /\bholdings?\s+(raised|cut|lowered|trimmed|boosted|reduced)\b/i,
-  /\b(position|stake)\s+(raised|cut|lowered|trimmed|boosted|reduced)\b/i,
-  /\b(raises?|cuts?|lowers?|trims?|boosts?|reduces?)\s+(its\s+)?(position|stake)\b/i
-];
-
-const countryQueryExclusions = {
-  usa: ["bank of america", "voice of america", "american airlines"]
-};
-
-const commodityNoiseTitlePatterns = [
-  /\bforecast\b/i,
-  /\bprice forecast\b/i,
-  /\bforecast for (today|tomorrow|next week|next 30 days)\b/i,
-  /\bfor today, tomorrow, next week\b/i,
-  /\bnext 30 days\b/i,
-  /\btechnical analysis\b/i,
-  /\belliott wave\b/i,
-  /\btrade ideas\b/i,
-  /\btraders?\b/i,
-  /\bprice prediction\b/i,
-  /\bmarket outlook\b/i,
-  /\bmarket analysis\b/i,
-  /\bhow .* matters\b/i,
-  /\blive price\b/i,
-  /\bsize, trends and insights\b/i
-];
-
-const commodityProxyTitlePatterns = [
-  /\b(etf|stock|stocks|shares|share|equity|equities)\b/i,
-  /\bminers?\b/i
-];
-
-app.use(express.json({ limit: "256kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+applyHttpDefaults(app, { publicDir: PUBLIC_DIR, rootDir: __dirname });
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -451,10 +184,10 @@ app.post("/api/watchlist", async (req, res) => {
   }
 
   const list = await readWatchlist();
-  const exists = list.some((existing) => existing.signature === item.signature);
-  const next = exists ? list : [item, ...list].slice(0, 30);
+  const existing = list.find((entry) => entry.signature === item.signature) || null;
+  const next = existing ? list : [item, ...list].slice(0, 30);
   await writeWatchlist(next);
-  res.status(exists ? 200 : 201).json({ item, items: next });
+  res.status(existing ? 200 : 201).json({ item: existing || item, items: next });
 });
 
 app.post("/api/user-tags", async (req, res) => {
@@ -466,9 +199,18 @@ app.post("/api/user-tags", async (req, res) => {
 
   const items = await readUserTags();
   const normalizedName = item.name.toLowerCase();
-  const next = [item, ...items.filter((entry) => entry.name.toLowerCase() !== normalizedName)].slice(0, 40);
+  const existing = items.find((entry) => entry.name.toLowerCase() === normalizedName) || null;
+  const stored = existing
+    ? {
+        ...existing,
+        ...item,
+        id: existing.id,
+        createdAt: existing.createdAt
+      }
+    : item;
+  const next = [stored, ...items.filter((entry) => entry.name.toLowerCase() !== normalizedName)].slice(0, 40);
   await writeUserTags(next);
-  res.status(201).json({ item, items: next });
+  res.status(existing ? 200 : 201).json({ item: stored, items: next });
 });
 
 app.post("/api/notifications/subscribe", async (req, res) => {
@@ -499,9 +241,23 @@ app.post("/api/alerts", async (req, res) => {
   }
 
   const alerts = await readAlerts();
-  const next = [alert, ...alerts.filter((item) => item.signature !== alert.signature)].slice(0, 40);
+  const existing = alerts.find((item) => item.signature === alert.signature) || null;
+  const stored = existing
+    ? {
+        ...existing,
+        ...alert,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        lastCheckedAt: existing.lastCheckedAt || "",
+        lastMatchCount: Number(existing.lastMatchCount || 0),
+        latestHeadline: existing.latestHeadline || "",
+        lastHitAt: existing.lastHitAt || null,
+        lastError: existing.lastError || ""
+      }
+    : alert;
+  const next = [stored, ...alerts.filter((item) => item.signature !== alert.signature)].slice(0, 40);
   await writeAlerts(next);
-  res.status(201).json({ item: alert, items: next });
+  res.status(existing ? 200 : 201).json({ item: stored, items: next });
 });
 
 app.delete("/api/alerts/:id", async (req, res) => {
@@ -623,8 +379,50 @@ app.get("/api/article-preview", async (req, res) => {
   }
 });
 
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+app.get("/robots.txt", (req, res) => {
+  const origin = getPublicOrigin(req);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.type("text/plain").send(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`);
+});
+
+app.get("/sitemap.xml", (req, res) => {
+  const origin = getPublicOrigin(req);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res
+    .type("application/xml")
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+        `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+        `  <url>\n` +
+        `    <loc>${escapeXml(origin + "/")}</loc>\n` +
+        `    <changefreq>hourly</changefreq>\n` +
+        `    <priority>1.0</priority>\n` +
+        `  </url>\n` +
+        `</urlset>\n`
+    );
+});
+
+app.get("*", async (req, res, next) => {
+  try {
+    const document = await renderIndexDocument(req, res);
+    res.setHeader("Cache-Control", "no-cache");
+    res.type("html").send(document);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use((error, req, res, _next) => {
+  console.error("Unhandled request error:", error);
+
+  if (res.headersSent) return;
+
+  if (req.path.startsWith("/api/")) {
+    res.status(500).json({ error: "Internal server error." });
+    return;
+  }
+
+  res.status(500).type("text/plain").send("Internal server error.");
 });
 
 app.listen(PORT, () => {
@@ -650,6 +448,7 @@ async function buildNewsRequest(queryParams) {
   const trackHistory = queryParams.track !== "0";
 
   if (mode === "world") {
+    if (!cleanText(queryParams.category || "")) throw new Error("Выберите тему новостей.");
     const category = sanitizeWorldCategory(queryParams.category);
     const preset = worldCategoryPresets[category];
     return {
@@ -683,6 +482,7 @@ async function buildNewsRequest(queryParams) {
       trackHistory,
       filters,
       label: company ? `${resolved.symbol} - ${company}` : resolved.symbol,
+      ticker: resolved.symbol,
       tickerSymbol: resolved.symbol,
       company,
       query,
@@ -691,7 +491,8 @@ async function buildNewsRequest(queryParams) {
   }
 
   if (mode === "commodity") {
-    const key = String(queryParams.commodity || "gold").toLowerCase();
+    const key = cleanText(queryParams.commodity || "").toLowerCase();
+    if (!key) throw new Error("Выберите сырье или металл.");
     const preset = commodityPresets[key];
     if (!preset) throw new Error("Выберите доступный товар/металл.");
     return {
@@ -772,13 +573,15 @@ async function fetchNews(request) {
     await enrichClusterLeadMedia(clusters);
   }
   const requestInfo = buildRequestInfo(request, collected.some((article) => article.resolvedSource === "auto") ? "auto" : inferPrimarySource(clusters));
+  const briefing = buildBriefing(processed, clusters, requestInfo);
 
   return {
     request: requestInfo,
     articles: processed,
     clusters,
     stats: buildStats(processed),
-    summary: buildBriefing(processed, clusters, requestInfo),
+    summary: briefing,
+    briefing,
     generatedAt: new Date().toISOString()
   };
 }
@@ -877,7 +680,7 @@ function parseGoogleRss(xml, topic = "") {
       publishedAt: normalizeDate(item.pubDate),
       provider: "Google News",
       tags: inferTags(`${item.title || ""} ${description}`, topic),
-      summary: cleanText(stripHtml(description))
+      summary: normalizeArticleSummary(description, cleanText(item.title))
     };
   });
 }
@@ -945,7 +748,11 @@ function getWorldPriority(article, category) {
   const tags = new Set(article.tags || []);
 
   if (category === "politics") return tags.has("политика") || tags.has("геополитика") ? 3 : 1;
-  if (category === "ordinary") return tags.has("политика") || tags.has("геополитика") ? 0 : 2;
+  if (category === "ordinary") {
+    if (tags.has("политика") || tags.has("геополитика") || tags.has("крипта") || isStockMarketArticle(article)) return 0;
+    if (tags.has("здоровье") || tags.has("наука") || tags.has("технологии") || tags.has("культура") || tags.has("спорт")) return 3;
+    return 1;
+  }
   if (category === "economy") {
     const strength = economyMentionStrength(article);
     if (strength >= 10) return 6;
@@ -992,7 +799,7 @@ async function fetchRssFeed(feed) {
   return items.map((item) => {
     const title = cleanText(decodeHtml(readFeedText(item.title)));
     const rawContent = readFeedText(item.description || item.summary || item["content:encoded"] || item.content);
-    const summary = cleanText(stripHtml(rawContent));
+    const summary = normalizeArticleSummary(rawContent, title);
     const url = normalizeFeedLink(item.link || item.guid || item.id);
 
     return {
@@ -1102,7 +909,12 @@ function articleMatchesRequest(article, request) {
 
   if (request.mode === "world") {
     if (request.category === "politics" && !(tags.has("политика") || tags.has("геополитика"))) return false;
-    if (request.category === "ordinary" && (tags.has("политика") || tags.has("геополитика"))) return false;
+    if (
+      request.category === "ordinary" &&
+      (tags.has("политика") || tags.has("геополитика") || tags.has("крипта") || isStockMarketArticle(article))
+    ) {
+      return false;
+    }
     if (request.category === "economy" && !isMacroEconomyArticle(article)) return false;
     if (request.category === "stocks" && !isStockMarketArticle(article)) return false;
     if (request.category === "crypto" && !tags.has("крипта")) return false;
@@ -1168,37 +980,6 @@ function getArticleSearchText(article, options = {}) {
   return parts.join(" ").toLowerCase();
 }
 
-function compactTerms(terms) {
-  const stopwords = new Set([
-    "and",
-    "or",
-    "the",
-    "for",
-    "with",
-    "stock",
-    "shares",
-    "inc",
-    "corp",
-    "company",
-    "price",
-    "prices",
-    "news",
-    "latest",
-    "headlines",
-    "today",
-    "новости",
-    "новость",
-    "сегодня",
-    "срочно",
-    "главное"
-  ]);
-  return [...new Set(terms.map((term) => cleanText(term).toLowerCase()).filter((term) => term.length > 2 && !stopwords.has(term)))];
-}
-
-function splitSearchTerms(value) {
-  return String(value || "").split(/[^\p{L}\p{N}$.-]+/u);
-}
-
 function sortArticlesForRequest(articles, request) {
   const enriched = articles.map((article) => ({
     ...article,
@@ -1220,11 +1001,9 @@ async function enrichArticlesForRelevance(articles, request) {
 
   const limit = Math.min(articles.length, RELEVANCE_ENRICH_LIMIT);
   await runWithConcurrency(articles.slice(0, limit), 4, async (article) => {
-    const content = await resolveArticleContent(article.url);
+    const content = await resolveArticleContent(article.url, article.title);
     if (!content) return;
-    if (content.summary && (!article.summary || article.summary.length < 80)) {
-      article.summary = content.summary;
-    }
+    article.summary = choosePreferredSummary(article.summary, content.summary, article.title);
     article.fullText = content.text || "";
     article.finalUrl = content.finalUrl || article.url;
   });
@@ -1355,7 +1134,7 @@ async function resolveArticleImage(url, fallbackImage = "") {
   }
 }
 
-async function resolveArticleContent(url) {
+async function resolveArticleContent(url, title = "") {
   const targetUrl = await resolveGoogleNewsArticleUrl(url);
   const key = String(targetUrl || url || "").split("#")[0];
   if (!key) return null;
@@ -1367,7 +1146,7 @@ async function resolveArticleContent(url) {
 
   try {
     const { html, finalUrl } = await fetchHtml(key, 7000);
-    const summary = extractMetaDescription(html);
+    const summary = extractMetaDescription(html, title);
     const text = extractPageText(html);
     const value = {
       finalUrl: finalUrl || key,
@@ -1534,29 +1313,40 @@ async function fetchGoogleNewsDecodeParams(sourceUrl) {
   const articleId = extractGoogleNewsArticleId(sourceUrl);
   if (!articleId) throw new Error("Google News article id not found.");
 
-  const articleUrl = `https://news.google.com/articles/${articleId}?hl=en-US&gl=US&ceid=US:en`;
-  const { html } = await fetchHtml(articleUrl, 7000);
-  const match =
-    html.match(/data-n-a-id="([^"]+)"[^>]*data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"/i) ||
-    html.match(/data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"[^>]*data-n-a-id="([^"]+)"/i);
+  const candidates = [
+    `https://news.google.com/articles/${articleId}?hl=en-US&gl=US&ceid=US:en`,
+    `https://news.google.com/rss/articles/${articleId}?hl=en-US&gl=US&ceid=US:en`,
+    `${String(sourceUrl || "").replace(/([?&])(?:hl|gl|ceid)=[^&]*/g, "").replace(/[?&]$/, "")}${String(sourceUrl || "").includes("?") ? "&" : "?"}hl=en-US&gl=US&ceid=US:en`
+  ];
 
-  if (!match) {
-    throw new Error("Google News decode params not found.");
+  for (const articleUrl of candidates) {
+    try {
+      const { html } = await fetchHtml(articleUrl, 7000);
+      const ordered =
+        html.match(/data-n-a-id="([^"]+)"[^>]*data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"/i) ||
+        html.match(/data-n-a-ts="([^"]+)"[^>]*data-n-a-sg="([^"]+)"[^>]*data-n-a-id="([^"]+)"/i);
+
+      if (!ordered) continue;
+
+      if (html.includes(`data-n-a-id="${ordered[1]}"`)) {
+        return {
+          articleId: ordered[1],
+          timestamp: ordered[2],
+          signature: ordered[3]
+        };
+      }
+
+      return {
+        articleId: ordered[3],
+        timestamp: ordered[1],
+        signature: ordered[2]
+      };
+    } catch {
+      continue;
+    }
   }
 
-  if (match.length === 4 && match[1] && match[2] && match[3] && html.includes(`data-n-a-id="${match[1]}"`)) {
-    return {
-      articleId: match[1],
-      timestamp: match[2],
-      signature: match[3]
-    };
-  }
-
-  return {
-    articleId: match[3],
-    timestamp: match[1],
-    signature: match[2]
-  };
+  throw new Error("Google News decode params not found.");
 }
 
 async function requestGoogleNewsDecodedUrl(params) {
@@ -1582,15 +1372,40 @@ async function requestGoogleNewsDecodedUrl(params) {
   });
 
   const text = await response.text();
-  const batchPayload = text.split("\n\n")[1];
-  if (!batchPayload) return "";
+  const payloadText = extractGoogleBatchPayload(text);
+  if (!payloadText) return "";
 
-  const rows = JSON.parse(batchPayload);
+  const rows = JSON.parse(payloadText);
   const target = rows.find((row) => row?.[0] === "wrb.fr" && row?.[1] === "Fbv4je");
   if (!target?.[2]) return "";
 
   const decoded = JSON.parse(target[2]);
   return cleanText(decoded?.[1] || "");
+}
+
+function extractGoogleBatchPayload(text) {
+  const normalized = String(text || "")
+    .replace(/^\)\]\}'\s*/, "")
+    .trim();
+
+  if (!normalized) return "";
+
+  const candidates = normalized
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!candidate.startsWith("[[")) continue;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return "";
 }
 
 function compareArticlesByNewest(a, b) {
@@ -1696,15 +1511,13 @@ function articleMatchesFocus(article, focus) {
 }
 
 function articleHasTickerMatch(article, request) {
-  const matchMode = request.filters?.matchMode || "balanced";
   const strength = tickerMentionStrength(article, request);
   const hasAnchor = articleHasTickerAnchor(article, request);
   const hasTitleAnchor = articleHasTickerTitleAnchor(article, request);
 
   if (!hasAnchor) return false;
-  if (matchMode !== "broad" && isTickerNoiseArticle(article, request)) return false;
-  if (matchMode === "strict") return hasTitleAnchor && strength >= minTickerMentionStrength(request);
-  if (matchMode === "balanced") return hasTitleAnchor && strength >= minTickerMentionStrength(request);
+  if (!hasTitleAnchor) return false;
+  if (isTickerNoiseArticle(article, request)) return false;
   return strength >= minTickerMentionStrength(request);
 }
 
@@ -1798,8 +1611,55 @@ function isTickerNoiseArticle(article, request) {
 
   if (!articleHasTickerTitleAnchor(article, request)) return false;
   if (tickerNoiseTitlePatterns.some((pattern) => pattern.test(text))) return true;
+  if (isInstitutionalOwnershipHeadline(title)) return true;
+  if (isTickerAdviceHeadline(title)) return true;
+  if (isTickerComparisonHeadline(title, request)) return true;
   if (hasMultipleTickerSubjects(article, request)) return true;
   return false;
+}
+
+function isInstitutionalOwnershipHeadline(title) {
+  const ownershipSignal =
+    /\b(?:stake|stakes|position|positions|holdings?|ownership|shares?)\b/i.test(title) ||
+    /\b(?:invests?|invested|investment|bought|purchased|sold|acquired|trimmed|boosted|reduced|raised|lowered|increased|decreased)\b/i.test(title);
+  const filerSignal =
+    /\b(?:advisors?|advisory|trust|fund|funds|capital|management|partners|wealth|pension|asset|investor|investors|llc|l\.l\.c\.|lp|l\.p\.)\b/i.test(title);
+
+  return ownershipSignal && filerSignal;
+}
+
+function isTickerAdviceHeadline(title) {
+  return [
+    /\bforecast\b/i,
+    /\bprice forecast\b/i,
+    /\bworth buying\b/i,
+    /\bhow to (?:trade|buy|reduce risk)\b/i,
+    /\bposition map\b/i,
+    /\bpremarket today\b/i,
+    /\b(stock|shares?) (?:update|outlook|prediction)\b/i,
+    /\bovervalued\b/i,
+    /\breduce risk\b/i,
+    /\breward mechanism\b/i,
+    /\btoday on\b/i,
+    /\btrading\b/i,
+    /\((?:[A-Za-z0-9_-]{8,})\)$/i
+  ].some((pattern) => pattern.test(title));
+}
+
+function isTickerComparisonHeadline(title, request) {
+  const symbol = String(request.tickerSymbol || "").toUpperCase();
+  const companyTerms = getCompanyIdentityTerms(request.company || "");
+  const comparatorLanguage = /\b(?:vs\.?|versus|stronger bet than|better than|compared with|compare)\b/i.test(title);
+  if (!comparatorLanguage) return false;
+
+  const cleaned = String(title || "");
+  const allCaps = cleaned.match(/\b[A-Z]{2,5}\b/g) || [];
+  const otherSymbols = [...new Set(allCaps)].filter((value) => value !== symbol);
+  if (otherSymbols.length >= 1) return true;
+
+  const normalized = cleaned.toLowerCase();
+  const companyHits = countDistinctTermMatches(normalized, companyTerms);
+  return companyHits <= 1;
 }
 
 function hasMultipleTickerSubjects(article, request) {
@@ -1948,7 +1808,7 @@ function matchesTickerSymbol(value, symbol) {
 
 function minTickerMentionStrength(request) {
   const matchMode = request.filters?.matchMode || "balanced";
-  const thresholds = { strict: 11, balanced: 8, broad: 6 };
+  const thresholds = { strict: 12, balanced: 10, broad: 10 };
   return thresholds[matchMode] ?? thresholds.balanced;
 }
 
@@ -2327,7 +2187,7 @@ async function fetchHtml(url, timeoutMs) {
 }
 
 async function readWatchlist() {
-  return readItemsFile(WATCHLIST_FILE);
+  return readNormalizedItems(WATCHLIST_FILE, normalizeWatchItem);
 }
 
 async function writeWatchlist(items) {
@@ -2335,7 +2195,7 @@ async function writeWatchlist(items) {
 }
 
 async function readSearchHistory() {
-  return readItemsFile(SEARCH_HISTORY_FILE);
+  return readNormalizedItems(SEARCH_HISTORY_FILE, normalizeHistoryItem);
 }
 
 async function writeSearchHistory(items) {
@@ -2343,7 +2203,7 @@ async function writeSearchHistory(items) {
 }
 
 async function readAlerts() {
-  return readItemsFile(ALERTS_FILE);
+  return readNormalizedItems(ALERTS_FILE, normalizeAlert);
 }
 
 async function writeAlerts(items) {
@@ -2351,7 +2211,7 @@ async function writeAlerts(items) {
 }
 
 async function readUserTags() {
-  return readItemsFile(USER_TAGS_FILE);
+  return readNormalizedItems(USER_TAGS_FILE, normalizeUserTag);
 }
 
 async function writeUserTags(items) {
@@ -2359,7 +2219,7 @@ async function writeUserTags(items) {
 }
 
 async function readPushSubscriptions() {
-  return readItemsFile(PUSH_SUBSCRIPTIONS_FILE);
+  return readNormalizedItems(PUSH_SUBSCRIPTIONS_FILE, normalizePushSubscription);
 }
 
 async function writePushSubscriptions(items) {
@@ -2455,32 +2315,112 @@ async function runDueAlertsCheck() {
 }
 
 async function readItemsFile(filePath) {
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed.items) ? parsed.items : [];
-  } catch {
-    return [];
+  const parsed = await readJsonOr(filePath, { items: [] });
+  return Array.isArray(parsed?.items) ? parsed.items : [];
+}
+
+async function readNormalizedItems(filePath, normalizer) {
+  const items = await readItemsFile(filePath);
+  const normalized = items.map((item) => normalizer(item, { preserveMeta: true })).filter(Boolean);
+
+  if (JSON.stringify(items) !== JSON.stringify(normalized)) {
+    await writeItemsFile(filePath, normalized);
   }
+
+  return normalized;
 }
 
 async function readJsonFile(filePath) {
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return readJsonOr(filePath, null);
 }
 
 async function writeItemsFile(filePath, items) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify({ items }, null, 2));
+  await writeJsonAtomic(filePath, { items });
 }
 
 async function writeJsonFile(filePath, value) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+  await writeJsonAtomic(filePath, value);
+}
+
+async function renderIndexDocument(req, res) {
+  const origin = getPublicOrigin(req);
+  const canonicalUrl = getCanonicalUrl(req, origin);
+  const socialImageUrl = new URL(DEFAULT_SOCIAL_IMAGE_PATH, `${origin}/`).toString();
+  const jsonLd = serializeJsonForHtml({
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "News Agent",
+    url: origin,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description: "Global news radar for world events, equities, crypto, commodities, and company signals."
+  });
+
+  return (await loadIndexTemplate())
+    .replaceAll("__CANONICAL_URL__", escapeHtmlAttribute(canonicalUrl))
+    .replaceAll("__OG_IMAGE_URL__", escapeHtmlAttribute(socialImageUrl))
+    .replaceAll("__CSP_NONCE__", escapeHtmlAttribute(res.locals.cspNonce || ""))
+    .replace("__WEBAPP_JSON_LD__", jsonLd);
+}
+
+async function loadIndexTemplate() {
+  const stats = await fs.stat(INDEX_TEMPLATE_FILE);
+  if (indexTemplateCache.contents && indexTemplateCache.mtimeMs === stats.mtimeMs) {
+    return indexTemplateCache.contents;
+  }
+
+  indexTemplateCache = {
+    mtimeMs: stats.mtimeMs,
+    contents: await fs.readFile(INDEX_TEMPLATE_FILE, "utf8")
+  };
+
+  return indexTemplateCache.contents;
+}
+
+function getPublicOrigin(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function getCanonicalUrl(req, origin) {
+  const pathname = req.path === "/index.html" ? "/" : req.path;
+  return new URL(pathname || "/", `${origin}/`).toString();
+}
+
+function normalizePublicBaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
+  } catch {
+    return "";
+  }
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function serializeJsonForHtml(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
 }
 
 async function recordSearchHistory(requestInfo) {
@@ -2498,60 +2438,77 @@ async function recordSearchHistory(requestInfo) {
   await writeSearchHistory([nextItem, ...withoutSame].slice(0, 25));
 }
 
-function normalizeWatchItem(body) {
-  const mode = String(body?.mode || "").toLowerCase();
-  const request = body?.request && typeof body.request === "object" ? body.request : null;
-  const label = cleanText(body?.label || request?.label || body?.query || body?.ticker || body?.commodity || "");
-  const value = cleanText(body?.value || body?.query || body?.ticker || body?.commodity || "");
+function normalizeWatchItem(body, options = {}) {
+  const request = normalizeStoredRequestShape(body?.request && typeof body.request === "object" ? body.request : body);
+  if (!request) return null;
 
-  if (!["world", "ticker", "commodity", "custom"].includes(mode)) return null;
-  if (mode !== "world" && !value && !request) return null;
+  const label = cleanText(body?.label || body?.value || defaultStoredRequestLabel(request));
+  const value = cleanText(body?.value || request.query || request.ticker || request.commodity || request.category || "");
+  if (request.mode !== "world" && !value) return null;
 
-  const signature = buildRequestSignature(request || { mode, label, value });
   return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    mode,
-    label: label || "Мировые новости",
+    id: normalizeEntityId(body?.id, options.preserveMeta),
+    mode: request.mode,
+    label: label || defaultStoredRequestLabel(request),
     value,
     request,
-    signature,
-    createdAt: new Date().toISOString()
+    signature: buildRequestSignature(request),
+    createdAt: normalizeStoredTimestamp(body?.createdAt, options.preserveMeta)
   };
 }
 
-function normalizeAlert(body) {
-  const request = body?.request && typeof body.request === "object" ? body.request : null;
-  const label = cleanText(body?.label || request?.label || "");
+function normalizeAlert(body, options = {}) {
+  const request = normalizeStoredRequestShape(body?.request && typeof body.request === "object" ? body.request : body);
+  const label = cleanText(body?.label || defaultStoredRequestLabel(request));
   const intervalMinutes = clamp(Number(body?.intervalMinutes || 60), 5, 1440);
   if (!request || !label) return null;
 
   return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: normalizeEntityId(body?.id, options.preserveMeta),
     label,
     signature: buildRequestSignature(request),
     request,
     intervalMinutes,
-    createdAt: new Date().toISOString(),
-    status: "ACTIVE"
+    createdAt: normalizeStoredTimestamp(body?.createdAt, options.preserveMeta),
+    status: body?.status === "PAUSED" ? "PAUSED" : "ACTIVE",
+    lastCheckedAt: normalizeOptionalTimestamp(body?.lastCheckedAt),
+    lastMatchCount: clamp(Number(body?.lastMatchCount || 0), 0, 100000),
+    latestHeadline: cleanText(body?.latestHeadline || ""),
+    lastHitAt: normalizeOptionalTimestamp(body?.lastHitAt),
+    lastError: cleanText(body?.lastError || "")
   };
 }
 
-function normalizeUserTag(body) {
-  const request = body?.request && typeof body.request === "object" ? body.request : null;
+function normalizeUserTag(body, options = {}) {
+  const request = normalizeStoredRequestShape(body?.request && typeof body.request === "object" ? body.request : body);
   const name = cleanText(body?.name || body?.label || "");
   if (!request || !name) return null;
 
   return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: normalizeEntityId(body?.id, options.preserveMeta),
     name,
     label: name,
     signature: buildRequestSignature(request),
     request,
-    createdAt: new Date().toISOString()
+    createdAt: normalizeStoredTimestamp(body?.createdAt, options.preserveMeta)
   };
 }
 
-function normalizePushSubscription(body) {
+function normalizeHistoryItem(body, options = {}) {
+  const request = normalizeStoredRequestShape(body?.request);
+  if (!request) return null;
+
+  return {
+    id: normalizeEntityId(body?.id, options.preserveMeta),
+    signature: buildRequestSignature(request),
+    label: cleanText(body?.label || defaultStoredRequestLabel(request)),
+    mode: request.mode,
+    request,
+    createdAt: normalizeStoredTimestamp(body?.createdAt, options.preserveMeta)
+  };
+}
+
+function normalizePushSubscription(body, options = {}) {
   const endpoint = cleanText(body?.endpoint || "");
   const p256dh = cleanText(body?.keys?.p256dh || "");
   const auth = cleanText(body?.keys?.auth || "");
@@ -2564,8 +2521,87 @@ function normalizePushSubscription(body) {
       p256dh,
       auth
     },
-    createdAt: new Date().toISOString()
+    createdAt: normalizeStoredTimestamp(body?.createdAt, options.preserveMeta)
   };
+}
+
+function normalizeStoredRequestShape(value) {
+  if (!value || typeof value !== "object") return null;
+
+  const mode = String(value.mode || "").toLowerCase();
+  if (!["world", "ticker", "commodity", "custom"].includes(mode)) return null;
+
+  const source = sanitizeSource(value.source);
+  const timespan = sanitizeTimespan(value.timespan);
+  const filters = normalizeFilters({
+    country: value.filters?.country ?? value.country,
+    focus: value.filters?.focus ?? value.focus,
+    language: value.filters?.language ?? value.language,
+    sourceType: value.filters?.sourceType ?? value.sourceType,
+    sortMode: value.filters?.sortMode ?? value.sortMode,
+    matchMode: value.filters?.matchMode ?? value.matchMode,
+    sourceInclude: Array.isArray(value.filters?.sourceInclude)
+      ? value.filters.sourceInclude.join(",")
+      : (value.filters?.sourceInclude ?? value.sourceInclude),
+    sourceExclude: Array.isArray(value.filters?.sourceExclude)
+      ? value.filters.sourceExclude.join(",")
+      : (value.filters?.sourceExclude ?? value.sourceExclude),
+    exclude: Array.isArray(value.filters?.excludeTerms)
+      ? value.filters.excludeTerms.join(",")
+      : (value.filters?.excludeTerms ?? value.exclude)
+  });
+
+  if (mode === "world") {
+    const category = cleanText(value.category || "").toLowerCase();
+    if (!category || !Object.prototype.hasOwnProperty.call(worldCategoryPresets, category)) return null;
+    return { mode, source, timespan, category, filters };
+  }
+
+  if (mode === "ticker") {
+    const ticker = sanitizeTicker(value.ticker || value.tickerSymbol || value.query);
+    if (!ticker) return null;
+    return { mode, source, timespan, ticker, tickerSymbol: ticker, filters };
+  }
+
+  if (mode === "commodity") {
+    const commodity = cleanText(value.commodity || "").toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(commodityPresets, commodity)) return null;
+    return { mode, source, timespan, commodity, filters };
+  }
+
+  const query = cleanText(value.query || value.label || "");
+  if (query.length < 2) return null;
+  return { mode, source, timespan, query, filters };
+}
+
+function defaultStoredRequestLabel(request) {
+  if (!request) return "News Agent";
+  if (request.mode === "world") return worldCategoryPresets[request.category]?.label || "World news";
+  if (request.mode === "ticker") return request.ticker || request.tickerSymbol || "Ticker";
+  if (request.mode === "commodity") return commodityPresets[request.commodity]?.label || request.commodity || "Commodity";
+  return request.query || "Custom search";
+}
+
+function normalizeEntityId(value, preserveMeta) {
+  const cleaned = cleanText(value || "");
+  if (preserveMeta && cleaned) return cleaned;
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeStoredTimestamp(value, preserveMeta) {
+  if (preserveMeta) {
+    const normalized = normalizeOptionalTimestamp(value);
+    if (normalized) return normalized;
+  }
+  return new Date().toISOString();
+}
+
+function normalizeOptionalTimestamp(value) {
+  const raw = cleanText(value || "");
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
 }
 
 function snapshotAlert(alert) {
@@ -2637,14 +2673,11 @@ async function sendPushToSubscribers(payload) {
 function buildRequestSignature(requestInfo) {
   return JSON.stringify({
     mode: requestInfo.mode,
-    label: requestInfo.label,
-    value: requestInfo.value,
     source: requestInfo.source,
     category: requestInfo.category,
     timespan: requestInfo.timespan,
     filters: requestInfo.filters,
-    parsedQuery: requestInfo.parsedQuery,
-    ticker: requestInfo.ticker,
+    ticker: requestInfo.ticker || requestInfo.tickerSymbol,
     commodity: requestInfo.commodity,
     query: requestInfo.query
   });
@@ -2752,13 +2785,6 @@ function inferTags(text = "", topic = "") {
   return tags;
 }
 
-function matchesNewsTerm(value, term) {
-  if (/^[a-z0-9.-]+$/i.test(term)) {
-    return new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(value);
-  }
-  return value.includes(term);
-}
-
 function normalizeFilters(queryParams) {
   const nested = queryParams?.filters && typeof queryParams.filters === "object" ? queryParams.filters : {};
   const rawExclude =
@@ -2792,7 +2818,7 @@ function requestToQueryParams(request, extra = {}) {
     category: request?.category,
     timespan: request?.timespan,
     limit: request?.limit,
-    ticker: request?.ticker,
+    ticker: request?.ticker || request?.tickerSymbol,
     commodity: request?.commodity,
     query: request?.query,
     country: request?.filters?.country,
@@ -2812,7 +2838,8 @@ function buildAlertUrl(alert) {
   const request = requestToQueryParams(alert?.request || {});
 
   Object.entries(request).forEach(([key, value]) => {
-    if (value == null || value === "" || value === "all" || value === "any") return;
+    if (value == null || value === "" || value === "any") return;
+    if (key !== "category" && value === "all") return;
     params.set(key, String(value));
   });
 
@@ -3047,6 +3074,51 @@ function readFeedText(value) {
   return "";
 }
 
+function choosePreferredSummary(existing, candidate, title = "") {
+  const current = normalizeArticleSummary(existing, title);
+  const next = normalizeArticleSummary(candidate, title);
+
+  if (!next) return current;
+  if (!current) return next;
+  if (looksNoisySummary(next) && !looksNoisySummary(current)) return current;
+  if (current.length >= 120 && next.length > current.length) return current;
+  if (next.length > current.length + 18 && next.length <= 220) return next;
+  return current;
+}
+
+function normalizeArticleSummary(value, title = "") {
+  let text = cleanText(stripHtml(decodeHtml(String(value || ""))));
+  if (!text) return "";
+
+  const normalizedTitle = cleanText(decodeHtml(String(title || "")));
+  if (normalizedTitle) {
+    const escapedTitle = escapeRegExp(normalizedTitle);
+    text = text.replace(new RegExp(`^${escapedTitle}[\\s:,-]+`, "i"), "");
+  }
+
+  text = text
+    .replace(/\s*[|•·]\s*/g, " • ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  text = text.replace(/^(?:Reuters|BBC|CNN|AP News|The New York Times|New York Times|Washington Post|Bloomberg|CNBC|ABC News|CBS News|MarketWatch|Yahoo Finance|Fox News|NPR|Politico|Haaretz|Jerusalem Post|DW)\b[\s:,-]*/i, "").trim();
+
+  if (looksNoisySummary(text)) return "";
+
+  if (text.length > 240) {
+    const clipped = text.slice(0, 237);
+    const safeEdge = Math.max(clipped.lastIndexOf(". "), clipped.lastIndexOf(" • "), clipped.lastIndexOf(" "));
+    text = `${clipped.slice(0, safeEdge > 120 ? safeEdge : 237).trim()}...`;
+  }
+
+  return text;
+}
+
+function looksNoisySummary(text) {
+  const sourceMatches = String(text || "").match(/\b(?:Reuters|BBC|CNN|AP News|The New York Times|New York Times|Washington Post|Bloomberg|CNBC|ABC News|CBS News|MarketWatch|Yahoo Finance|Fox News|NPR|Politico|Haaretz|Jerusalem Post|DW)\b/gi) || [];
+  return sourceMatches.length >= 2;
+}
+
 function extractFeedImage(item, baseUrl = "", html = "") {
   const candidates = [
     item?.enclosure,
@@ -3107,12 +3179,13 @@ function extractMetaContent(html, pattern) {
   return cleanText(decodeHtml(match?.[1] || ""));
 }
 
-function extractMetaDescription(html) {
-  return (
+function extractMetaDescription(html, title = "") {
+  return normalizeArticleSummary(
     extractMetaContent(html, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
     extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i) ||
     extractMetaContent(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
-    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+    extractMetaContent(html, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i),
+    title
   );
 }
 

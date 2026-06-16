@@ -245,6 +245,8 @@ const I18N = {
       },
       prompts: {
         chooseTopic: "Choose a topic first.",
+        chooseCommodity: "Choose a commodity first.",
+        enterTicker: "Enter a ticker symbol.",
         alertInterval: "Alert interval in minutes",
         enterQuery: "Enter a search query."
       },
@@ -412,6 +414,8 @@ const I18N = {
       },
       prompts: {
         chooseTopic: "Сначала выбери тему.",
+        chooseCommodity: "Сначала выбери сырье.",
+        enterTicker: "Введите тикер компании.",
         alertInterval: "Интервал алерта в минутах",
         enterQuery: "Введите поисковый запрос."
       },
@@ -579,6 +583,8 @@ const I18N = {
       },
       prompts: {
         chooseTopic: "Спочатку оберіть тему.",
+        chooseCommodity: "Спочатку оберіть сировину.",
+        enterTicker: "Введіть тікер компанії.",
         alertInterval: "Інтервал алерта в хвилинах",
         enterQuery: "Введіть пошуковий запит."
       },
@@ -1020,14 +1026,15 @@ function setMode(mode) {
 }
 
 async function runSearch(options = {}) {
-  if (state.mode === "world" && !elements.worldCategorySelect.value) {
-    renderIdleState(currentUi().prompts.chooseTopic);
+  clearInlineMessage();
+  const request = buildRequest();
+  const validationError = getRequestValidationMessage(request);
+  if (validationError) {
+    renderIdleState(validationError);
     setError("error");
-    elements.worldCategorySelect.focus();
+    focusPrimaryFieldForMode(request.mode);
     return;
   }
-
-  const request = buildRequest();
   state.lastRequest = request;
   syncUrl();
   setBusy("поиск");
@@ -1072,12 +1079,38 @@ function buildRequest(overrides = {}) {
   return { ...base, ...overrides };
 }
 
+function getRequestValidationMessage(request) {
+  if (!request) return currentUi().results.empty;
+  if (request.mode === "world" && !cleanText(request.category || "")) return currentUi().prompts.chooseTopic;
+  if (request.mode === "ticker" && !cleanText(request.ticker || request.tickerSymbol || "")) return currentUi().prompts.enterTicker;
+  if (request.mode === "commodity" && !cleanText(request.commodity || "")) return currentUi().prompts.chooseCommodity;
+  if (request.mode === "custom" && cleanText(request.query || "").length < 2) return currentUi().prompts.enterQuery;
+  return "";
+}
+
+function focusPrimaryFieldForMode(mode) {
+  if (mode === "ticker") {
+    elements.tickerInput.focus();
+    return;
+  }
+  if (mode === "commodity") {
+    elements.commoditySelect.focus();
+    return;
+  }
+  if (mode === "custom") {
+    elements.queryInput.focus();
+    return;
+  }
+  elements.worldCategorySelect.focus();
+}
+
 function syncUrl() {
   const request = buildRequest({ track: undefined });
   const params = new URLSearchParams();
   Object.entries(request).forEach(([key, value]) => {
-    if (value === "" || value === "any" || value === "all" || value == null) return;
+    if (value === "" || value === "any" || value == null) return;
     if (key === "category" && state.mode !== "world") return;
+    if (key !== "category" && value === "all") return;
     if (key === "commodity" && state.mode !== "commodity") return;
     if (key === "ticker" && state.mode !== "ticker") return;
     if (key === "query" && state.mode !== "custom") return;
@@ -1525,73 +1558,7 @@ function renderIdleState(message = "") {
   if (elements.briefingLines) {
     elements.briefingLines.innerHTML = `<p>${escapeHtml(currentUi().results.summaryPlaceholder)}</p>`;
   }
-  elements.resultsList.innerHTML = renderIdlePreview();
-}
-
-function renderIdlePreview() {
-  const ui = currentUi();
-  const lead = {
-    title: state.locale === "ru" ? "Выбери тему и получи белую editorial-ленту с главной историей наверху" : state.locale === "uk" ? "Обери тему і отримай світлу editorial-стрічку з головною історією зверху" : "Pick a topic and get a clean editorial feed with a top story first",
-    summary: state.locale === "ru" ? "Этот режим показывает одну крупную главную историю, короткую боковую подборку и более спокойную ленту ниже." : state.locale === "uk" ? "Цей режим показує одну велику головну історію, коротку бічну добірку та спокійнішу стрічку нижче." : "This layout gives you one large lead story, a short side selection, and a calmer stream below.",
-    tags: state.locale === "ru" ? ["обзор", "мир"] : state.locale === "uk" ? ["огляд", "світ"] : ["overview", "world"]
-  };
-
-  const side = [
-    {
-      title: state.locale === "ru" ? "Тикеры, сырье и мир разделены по режимам" : state.locale === "uk" ? "Тікери, сировина і світ розділені за режимами" : "Tickers, commodities, and world are separated by mode",
-      summary: state.locale === "ru" ? "Так проще быстро переключаться между разными типами новостей." : state.locale === "uk" ? "Так простіше швидко перемикатися між різними типами новин." : "That makes it easier to move between very different news flows."
-    },
-    {
-      title: state.locale === "ru" ? "Семантические фильтры и алерты остаются на месте" : state.locale === "uk" ? "Семантичні фільтри та алерти залишаються на місці" : "Semantic filters and alerts stay available",
-      summary: state.locale === "ru" ? "Внешний вид будет чище, но функции поиска и алертов никуда не пропадают." : state.locale === "uk" ? "Вигляд стане чистішим, але функції пошуку та алертів нікуди не зникають." : "The layout gets cleaner without losing the search and alert tools."
-    }
-  ];
-
-  const list = [
-    {
-      title: state.locale === "ru" ? "Политика и обычные новости за 24 часа" : state.locale === "uk" ? "Політика та звичайні новини за 24 години" : "Politics and general news in the last 24 hours",
-      summary: state.locale === "ru" ? "Подходит для быстрого обзора мира без ручной сортировки источников." : state.locale === "uk" ? "Підходить для швидкого огляду світу без ручного сортування джерел." : "Best for a fast world overview without manually sorting sources."
-    },
-    {
-      title: state.locale === "ru" ? "Умный поиск по стране и смыслу" : state.locale === "uk" ? "Розумний пошук за країною та змістом" : "Semantic search by country and topic",
-      summary: state.locale === "ru" ? "Запросы вроде Canada news или America news можно сузить без спортивного и случайного мусора." : state.locale === "uk" ? "Запити на кшталт Canada news або America news можна звузити без спортивного та випадкового шуму." : "Queries like Canada news or America news can stay focused without sports or random noise."
-    },
-    {
-      title: state.locale === "ru" ? "Отдельный поток для stock market и crypto" : state.locale === "uk" ? "Окремий потік для stock market і crypto" : "Dedicated stream for stock market and crypto",
-      summary: state.locale === "ru" ? "Режимы для рынков вынесены отдельно, чтобы не смешивать их с общей новостной повесткой." : state.locale === "uk" ? "Режими для ринків винесені окремо, щоб не змішувати їх із загальною новинною повісткою." : "Market modes are separated so they do not get mixed with the general news flow."
-    }
-  ];
-
-  return `
-    <section class="idle-preview">
-      <div class="idle-preview-head">
-        <span class="idle-preview-kicker">${escapeHtml(ui.results.idleLabel)}</span>
-        <p>${escapeHtml(ui.results.idle)}</p>
-      </div>
-      <section class="editorial-board">
-        <article class="editorial-hero idle-editorial-hero">
-          ${renderStoryTextPanel(lead, "hero")}
-        </article>
-      </section>
-      <section class="story-list-section">
-        <div class="stream-section-head">
-          <h3>${escapeHtml(ui.results.moreStories)}</h3>
-        </div>
-        <div class="editorial-feed-list">
-          ${side.map((item) => `
-            <article class="editorial-feed-card idle-feed-card">
-              ${renderStoryTextPanel(item, "feed")}
-            </article>
-          `).join("")}
-          ${list.map((item) => `
-            <article class="editorial-feed-card idle-feed-card">
-              ${renderStoryTextPanel(item, "feed")}
-            </article>
-          `).join("")}
-        </div>
-      </section>
-    </section>
-  `;
+  elements.resultsList.innerHTML = `<div class="empty-state">${escapeHtml(currentUi().results.idle)}</div>`;
 }
 
 function renderError(message) {
@@ -1611,8 +1578,25 @@ function sanitizeUiError(message) {
   return raw;
 }
 
+function showInlineError(message) {
+  elements.message.textContent = sanitizeUiError(message);
+  elements.message.hidden = false;
+}
+
+function clearInlineMessage() {
+  elements.message.textContent = "";
+  elements.message.hidden = true;
+}
+
 async function saveCurrentWatch() {
   const request = buildRequest();
+  const validationError = getRequestValidationMessage(request);
+  if (validationError) {
+    showInlineError(validationError);
+    setError("error");
+    focusPrimaryFieldForMode(request.mode);
+    return;
+  }
   const payload = toWatchItem(request);
   if (!payload) return;
 
@@ -1625,9 +1609,10 @@ async function saveCurrentWatch() {
       body: JSON.stringify(payload)
     });
     await loadWatchlist();
+    clearInlineMessage();
     setReady("готов");
   } catch (error) {
-    renderError(error.message);
+    showInlineError(error.message);
     setError("ошибка");
   }
 }
@@ -1643,6 +1628,13 @@ function toWatchItem(request) {
 
 async function createAlertFromCurrentSearch() {
   const request = buildRequest();
+  const validationError = getRequestValidationMessage(request);
+  if (validationError) {
+    showInlineError(validationError);
+    setError("error");
+    focusPrimaryFieldForMode(request.mode);
+    return;
+  }
   const interval = Number(prompt(currentUi().prompts.alertInterval, "60") || "60");
   if (!Number.isFinite(interval) || interval <= 0) return;
 
@@ -1660,9 +1652,10 @@ async function createAlertFromCurrentSearch() {
     });
     await loadAlerts();
     configureAlertMonitor();
+    clearInlineMessage();
     setReady("готов");
   } catch (error) {
-    renderError(error.message);
+    showInlineError(error.message);
     setError("ошибка");
   }
 }
@@ -1674,9 +1667,11 @@ async function shareCurrentSearch() {
 
 function buildCurrentPageSharePayload() {
   const url = `${window.location.origin}${window.location.pathname}${window.location.search}`;
-  const label = localizedRequestLabel(buildRequest());
-  const englishLabel = localizedRequestLabel(buildRequest(), "en");
-  const mode = currentUi().results.activeModes[state.mode] || "News";
+  const request = buildRequest();
+  const validationError = getRequestValidationMessage(request);
+  const label = validationError ? "News Agent" : localizedRequestLabel(request);
+  const englishLabel = validationError ? "News Agent" : localizedRequestLabel(request, "en");
+  const mode = validationError ? "News" : (currentUi().results.activeModes[state.mode] || "News");
   return {
     title: `${label} - News Agent`,
     text: `${mode}: ${label}`,
@@ -1899,9 +1894,10 @@ async function checkAlerts() {
   try {
     await api("/api/alerts/check", { method: "POST" });
     await loadAlerts();
+    clearInlineMessage();
     setReady("готов");
   } catch (error) {
-    renderError(error.message);
+    showInlineError(error.message);
     setError("ошибка");
   }
 }
@@ -1950,7 +1946,7 @@ function applyRequestToForm(request) {
   elements.sourceSelect.value = localizedMap("sources")[request.source] ? request.source : "google";
   elements.timespanSelect.value = request.timespan || "24h";
   elements.worldCategorySelect.value = request.category || "all";
-  elements.tickerInput.value = request.ticker || "";
+  elements.tickerInput.value = request.ticker || request.tickerSymbol || "";
   elements.commoditySelect.value = request.commodity || "gold";
   elements.queryInput.value = request.query || "";
   elements.countryInput.value = request.filters?.country || request.country || "";
@@ -1969,7 +1965,7 @@ function watchLabel(request) {
 }
 
 function requestBadge(request) {
-  if (request?.mode === "ticker") return request.ticker?.toUpperCase() || currentUi().badges.ticker;
+  if (request?.mode === "ticker") return (request.ticker || request.tickerSymbol)?.toUpperCase() || currentUi().badges.ticker;
   if (request?.mode === "commodity") return localizedMap("commodities")[request.commodity] || request.commodity || currentUi().badges.commodity;
   if (request?.mode === "custom") return currentUi().badges.custom;
   return localizedMap("worldCategories")[request?.category || "all"] || currentUi().badges.world;
@@ -1996,6 +1992,14 @@ async function saveUserTag() {
     return;
   }
 
+  const validationError = getRequestValidationMessage(request);
+  if (validationError) {
+    showInlineError(validationError);
+    setError("error");
+    focusPrimaryFieldForMode(request.mode);
+    return;
+  }
+
   setBusy("тег");
 
   try {
@@ -2009,9 +2013,10 @@ async function saveUserTag() {
     });
     elements.userTagInput.value = "";
     await loadUserTags();
+    clearInlineMessage();
     setReady("готов");
   } catch (error) {
-    renderError(error.message);
+    showInlineError(error.message);
     setError("ошибка");
   }
 }

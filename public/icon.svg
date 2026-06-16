@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title>News Agent</title>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5f72ff" />
+      <stop offset="100%" stop-color="#8ea0ff" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)" />
+  <path d="M58 188V68h26l56 72V68h26v120h-24l-58-75v75H58Z" fill="#ffffff" />
+  <circle cx="192" cy="92" r="14" fill="#ffffff" opacity="0.88" />
+  <circle cx="204" cy="156" r="10" fill="#ffffff" opacity="0.7" />
+</svg>

@@ -212,8 +212,8 @@ async function runCase(test) {
       };
     }
 
-    const topArticles = (payload.articles || []).slice(0, 10);
-    const judged = topArticles.map((article, index) => judgeArticle(article, test.validator, index));
+    const evaluatedArticles = payload.articles || [];
+    const judged = evaluatedArticles.map((article, index) => judgeArticle(article, test.validator, index));
     const passCount = judged.filter((item) => item.pass).length;
     const failCount = judged.length - passCount;
 
@@ -223,12 +223,13 @@ async function runCase(test) {
       ok: true,
       durationMs: Date.now() - startedAt,
       totalArticles: payload.articles?.length || 0,
+      evaluatedArticles: judged.length,
       source: payload.request?.source || "-",
       summary: payload.summary?.lines || [],
       passCount,
       failCount,
-      topPrecision: judged.length ? Number((passCount / judged.length).toFixed(2)) : 0,
-      topArticles: judged
+      precision: judged.length ? Number((passCount / judged.length).toFixed(2)) : 0,
+      sampleArticles: judged.slice(0, 15)
     };
   } catch (error) {
     return {
@@ -314,7 +315,7 @@ function buildReport(results) {
     passedCases: okResults.length,
     failedCases: failedResults.length,
     averagePrecision: okResults.length
-      ? Number((okResults.reduce((sum, item) => sum + item.topPrecision, 0) / okResults.length).toFixed(2))
+      ? Number((okResults.reduce((sum, item) => sum + item.precision, 0) / okResults.length).toFixed(2))
       : 0
   };
 
@@ -323,7 +324,7 @@ function buildReport(results) {
     const mode = item.id.split("-")[0];
     byMode[mode] ??= { cases: 0, precision: 0 };
     byMode[mode].cases += 1;
-    byMode[mode].precision += item.topPrecision;
+    byMode[mode].precision += item.precision;
   }
 
   for (const value of Object.values(byMode)) {
@@ -352,7 +353,7 @@ function toMarkdown(report) {
   lines.push(`- Total cases: ${report.summary.totalCases}`);
   lines.push(`- Successful cases: ${report.summary.passedCases}`);
   lines.push(`- Failed cases: ${report.summary.failedCases}`);
-  lines.push(`- Average top-10 heuristic precision: ${report.summary.averagePrecision}`);
+  lines.push(`- Average heuristic precision across full evaluated sets: ${report.summary.averagePrecision}`);
   lines.push("");
   lines.push("## Precision by mode");
   lines.push("");
@@ -378,16 +379,20 @@ function toMarkdown(report) {
 
     lines.push(`- Source plan: ${item.source}`);
     lines.push(`- Returned articles: ${item.totalArticles}`);
-    lines.push(`- Top-10 heuristic precision: ${item.topPrecision}`);
+    lines.push(`- Evaluated articles: ${item.evaluatedArticles}`);
+    lines.push(`- Heuristic precision: ${item.precision}`);
+    lines.push(`- Off-topic articles: ${item.failCount}`);
     lines.push(`- Duration: ${item.durationMs} ms`);
     if (item.summary?.length) {
       lines.push(`- Briefing: ${item.summary.join(" ")}`);
     }
     lines.push("");
+    lines.push("_Table below shows the first 15 evaluated articles for quick review._");
+    lines.push("");
     lines.push("| # | Pass | Source | Score | Tags | Title |");
     lines.push("|---|---|---|---:|---|---|");
 
-    for (const article of item.topArticles) {
+    for (const article of item.sampleArticles) {
       const passLabel = article.pass ? "yes" : `no (${article.reason})`;
       lines.push(
         `| ${article.rank} | ${escapeCell(passLabel)} | ${escapeCell(article.provider)} | ${article.score} | ${escapeCell(article.tags.join(", "))} | ${escapeCell(article.title)} |`
