@@ -67,6 +67,14 @@ const REQUEST_USER_AGENT =
 const EMPTY_IMAGE_CACHE_TTL_MS = 15 * 60 * 1000;
 const INDEX_TEMPLATE_FILE = path.join(PUBLIC_DIR, "index.html");
 const DEFAULT_SOCIAL_IMAGE_PATH = "/mockups/concept-4-visual-story-stream.png";
+const tickerOverrides = {
+  NRED: {
+    symbol: "NREDF",
+    name: "NovaRed Mining Inc.",
+    aliases: ["NRED", "NREDF", "NRED.CN", "NRED.NE"],
+    companyAliases: ["NovaRed Mining Inc.", "Rumble Resources Inc.", "NovaRedMin"]
+  }
+};
 const tickerBrandNoiseWords = new Set([
   ...companyNoiseWords,
   "mining",
@@ -680,7 +688,7 @@ async function fetchGoogleArticles(request) {
     return rankWorldArticles(articles, request);
   }
 
-  const countryTerm = getGoogleCountrySearchTerm(request);
+  const countryTerm = shouldInjectCountryIntoQuery(request) ? getGoogleCountrySearchTerm(request) : "";
   const queryBase = [countryTerm, request.googleQuery || request.query].filter(Boolean).join(" ");
   const query = `${queryBase} when:${toGoogleWhen(request.timespan)}`;
   params.set("q", query);
@@ -938,7 +946,7 @@ function articleMatchesRequest(article, request) {
 
   if (filters.language !== "any" && !languageMatches(article, filters.language)) return false;
   if (filters.sourceType !== "any" && inferSourceQuality(article).tier !== filters.sourceType) return false;
-  if (filters.country && !articleMatchesCountry(article, filters.country)) return false;
+  if (shouldHardFilterByCountry(request) && filters.country && !articleMatchesCountry(article, filters.country)) return false;
   if (!sourceAllowed(article, filters)) return false;
 
   if (request.mode === "world") {
@@ -2155,6 +2163,7 @@ function scheduleGdelt(task) {
 async function resolveTicker(rawTicker) {
   const symbol = sanitizeTicker(rawTicker);
   if (!symbol) return { symbol: "", name: "" };
+  const override = tickerOverrides[symbol] || null;
 
   const cached = tickerCache.get(symbol);
   if (cached && Date.now() - cached.createdAt < 24 * 60 * 60 * 1000) {
@@ -2173,25 +2182,40 @@ async function resolveTicker(rawTicker) {
     const quote = exact || quotes[0] || {};
     const aliases = compactTerms([
       symbol,
+      override?.symbol,
       quote.symbol,
+      ...(override?.aliases || []),
       ...quotes.slice(0, 5).map((item) => item.symbol)
     ]).map((value) => sanitizeTicker(value)).filter(Boolean);
     const companyAliases = compactTerms([
+      override?.name,
+      ...(override?.companyAliases || []),
       quote.longname,
       quote.shortname,
       quote.prevName,
       ...quotes.slice(0, 5).flatMap((item) => [item.longname, item.shortname, item.prevName])
     ]);
     const value = {
-      symbol: sanitizeTicker(quote.symbol || symbol),
-      name: cleanText(quote.longname || quote.shortname || symbol),
+      symbol: sanitizeTicker(quote.symbol || override?.symbol || symbol),
+      name: cleanText(quote.longname || quote.shortname || override?.name || ""),
       aliases,
       companyAliases
     };
     tickerCache.set(symbol, { createdAt: Date.now(), value });
     return value;
   } catch {
-    const value = { symbol, name: symbol, aliases: [symbol], companyAliases: [symbol] };
+    const fallbackAliases = compactTerms([
+      symbol,
+      override?.symbol,
+      ...(override?.aliases || []),
+      ...(/^[A-Z]{4}$/.test(symbol) ? [`${symbol}F`, `${symbol}.CN`, `${symbol}.NE`] : [])
+    ]).map((value) => sanitizeTicker(value)).filter(Boolean);
+    const value = {
+      symbol: sanitizeTicker(override?.symbol || symbol),
+      name: cleanText(override?.name || ""),
+      aliases: fallbackAliases.length ? fallbackAliases : [symbol],
+      companyAliases: compactTerms([override?.name, ...(override?.companyAliases || [])])
+    };
     tickerCache.set(symbol, { createdAt: Date.now(), value });
     return value;
   }
@@ -3006,6 +3030,20 @@ function getGoogleCountrySearchTerm(request) {
   const country = normalizeCountry(request?.filters?.country);
   if (!country) return "";
   return countryPrimaryTerms[country] || countryLexicon[country]?.[0] || country;
+}
+
+function shouldInjectCountryIntoQuery(request) {
+  if (!request?.filters?.country) return false;
+  if (request.mode === "ticker") return false;
+  if (request.mode === "commodity") return false;
+  return true;
+}
+
+function shouldHardFilterByCountry(request) {
+  if (!request?.filters?.country) return false;
+  if (request.mode === "ticker") return false;
+  if (request.mode === "commodity") return false;
+  return true;
 }
 
 function sanitizeTimespan(timespan) {
