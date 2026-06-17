@@ -36,7 +36,6 @@ const elements = {
   queryInput: document.querySelector("#queryInput"),
   timespanSelect: document.querySelector("#timespanSelect"),
   sourceSelect: document.querySelector("#sourceSelect"),
-  countryInput: document.querySelector("#countryInput"),
   languageSelect: document.querySelector("#languageSelect"),
   focusSelect: document.querySelector("#focusSelect"),
   sourceTypeSelect: document.querySelector("#sourceTypeSelect"),
@@ -129,7 +128,7 @@ const I18N = {
       searchMode: "Search mode",
       advanced: {
         title: "Advanced filters",
-        copy: "Country, focus, language, source rules",
+        copy: "Focus, language, source rules",
         pill: "Optional"
       },
       tabs: { world: "24h", ticker: "Ticker", commodity: "Commodities", custom: "Query" },
@@ -140,7 +139,6 @@ const I18N = {
         queryInput: "Query",
         timespanSelect: "Time range",
         sourceSelect: "Source",
-        countryInput: "Country",
         languageSelect: "Language",
         focusSelect: "Focus",
         sourceTypeSelect: "Source type",
@@ -154,7 +152,6 @@ const I18N = {
         worldCategorySelect: "Choose a topic",
         tickerInput: "NVDA",
         queryInput: "central bank gold buying",
-        countryInput: "USA",
         excludeInputCustom: "hockey, weather",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -298,7 +295,7 @@ const I18N = {
       searchMode: "Режим поиска",
       advanced: {
         title: "Расширенные фильтры",
-        copy: "Страна, фокус, язык и правила по источникам",
+        copy: "Фокус, язык и правила по источникам",
         pill: "Опционально"
       },
       tabs: { world: "24 часа", ticker: "Тикер", commodity: "Сырье", custom: "Запрос" },
@@ -309,7 +306,6 @@ const I18N = {
         queryInput: "Запрос",
         timespanSelect: "Период",
         sourceSelect: "Источник",
-        countryInput: "Страна",
         languageSelect: "Язык",
         focusSelect: "Фокус",
         sourceTypeSelect: "Тип источника",
@@ -323,7 +319,6 @@ const I18N = {
         worldCategorySelect: "Выбери тему",
         tickerInput: "NVDA",
         queryInput: "покупки золота центробанками",
-        countryInput: "США",
         excludeInputCustom: "хоккей, погода",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -467,7 +462,7 @@ const I18N = {
       searchMode: "Режим пошуку",
       advanced: {
         title: "Розширені фільтри",
-        copy: "Країна, фокус, мова та правила для джерел",
+        copy: "Фокус, мова та правила для джерел",
         pill: "Опційно"
       },
       tabs: { world: "24 години", ticker: "Тікер", commodity: "Сировина", custom: "Запит" },
@@ -478,7 +473,6 @@ const I18N = {
         queryInput: "Запит",
         timespanSelect: "Період",
         sourceSelect: "Джерело",
-        countryInput: "Країна",
         languageSelect: "Мова",
         focusSelect: "Фокус",
         sourceTypeSelect: "Тип джерела",
@@ -492,7 +486,6 @@ const I18N = {
         worldCategorySelect: "Оберіть тему",
         tickerInput: "NVDA",
         queryInput: "закупівля золота центробанками",
-        countryInput: "США",
         excludeInputCustom: "хокей, погода",
         sourceIncludeInput: "reuters, bbc, cnbc",
         sourceExcludeInput: "fox, blog, tabloid",
@@ -977,7 +970,7 @@ function applyLocale() {
 
 function hydrateFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  const hasRequestParams = ["category", "ticker", "commodity", "query", "country", "focus", "source", "tag"]
+  const hasRequestParams = ["category", "ticker", "commodity", "query", "focus", "source", "tag"]
     .some((key) => params.has(key));
   state.mode = params.get("mode") || "world";
   elements.sourceSelect.value = params.get("source") || "google";
@@ -986,7 +979,6 @@ function hydrateFromUrl() {
   elements.tickerInput.value = params.get("ticker") || "";
   elements.commoditySelect.value = params.get("commodity") || "gold";
   elements.queryInput.value = params.get("query") || "";
-  elements.countryInput.value = params.get("country") || "";
   elements.languageSelect.value = params.get("language") || "any";
   elements.focusSelect.value = params.get("focus") || "all";
   elements.sourceTypeSelect.value = params.get("sourceType") || "any";
@@ -1061,7 +1053,6 @@ function buildRequest(overrides = {}) {
     source: elements.sourceSelect.value,
     timespan: elements.timespanSelect.value,
     category: elements.worldCategorySelect.value,
-    country: elements.countryInput.value.trim(),
     language: elements.languageSelect.value,
     focus: elements.focusSelect.value,
     sourceType: elements.sourceTypeSelect.value,
@@ -1958,7 +1949,6 @@ function applyRequestToForm(request) {
   elements.tickerInput.value = request.ticker || request.tickerSymbol || "";
   elements.commoditySelect.value = request.commodity || "gold";
   elements.queryInput.value = request.query || "";
-  elements.countryInput.value = request.filters?.country || request.country || "";
   elements.languageSelect.value = request.filters?.language || request.language || "any";
   elements.focusSelect.value = request.filters?.focus || request.focus || "all";
   elements.sourceTypeSelect.value = request.filters?.sourceType || request.sourceType || "any";
@@ -2291,8 +2281,6 @@ function selectedWorldCategoryLabel() {
 function sourceLabel(source) {
   const normalized = source === "auto" ? "google" : source;
   const base = localizedMap("sources")[normalized] || state.sources[normalized] || "-";
-  const country = elements.countryInput?.value?.trim();
-  if (normalized === "google") return `${base} · ${country || "USA"}`;
   return base;
 }
 
