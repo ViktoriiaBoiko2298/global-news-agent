@@ -67,6 +67,24 @@ const REQUEST_USER_AGENT =
 const EMPTY_IMAGE_CACHE_TTL_MS = 15 * 60 * 1000;
 const INDEX_TEMPLATE_FILE = path.join(PUBLIC_DIR, "index.html");
 const DEFAULT_SOCIAL_IMAGE_PATH = "/mockups/concept-4-visual-story-stream.png";
+const tickerBrandNoiseWords = new Set([
+  ...companyNoiseWords,
+  "mining",
+  "minerals",
+  "resources",
+  "metals",
+  "energy",
+  "pharma",
+  "biotech",
+  "bio",
+  "therapeutics",
+  "exploration",
+  "financial",
+  "capital",
+  "technologies",
+  "technology",
+  "materials"
+]);
 
 const cache = new Map();
 const tickerCache = new Map();
@@ -467,13 +485,27 @@ async function buildNewsRequest(queryParams) {
   }
 
   if (mode === "ticker") {
-    const ticker = sanitizeTicker(queryParams.ticker || queryParams.query);
-    if (!ticker) throw new Error("Введите тикер компании.");
-    const resolved = await resolveTicker(ticker);
-    const company = resolved.name && resolved.name !== ticker ? resolved.name : "";
-    const query = company
-      ? `("${resolved.symbol}" OR "${company}") (stock OR shares OR earnings OR revenue OR guidance OR merger OR acquisition OR analyst)`
-      : `("${resolved.symbol}" OR "$${resolved.symbol}") (stock OR shares OR earnings OR revenue OR guidance OR merger OR acquisition OR analyst)`;
+    const requestedTicker = sanitizeTicker(queryParams.ticker || queryParams.query);
+    if (!requestedTicker) throw new Error("Введите тикер компании.");
+    const resolved = await resolveTicker(requestedTicker);
+    const tickerSymbol = sanitizeTicker(resolved.symbol || requestedTicker);
+    const company = cleanText(resolved.name || "");
+    const tickerAliases = compactTerms([requestedTicker, tickerSymbol, ...(resolved.aliases || [])]).map((value) => sanitizeTicker(value)).filter(Boolean);
+    const companyAliases = compactTerms([company, ...(resolved.companyAliases || [])]);
+    const aliasTerms = [
+      ...tickerAliases.map((value) => `"${value}"`),
+      ...tickerAliases.map((value) => `"$${value}"`),
+      ...companyAliases.map((value) => `"${value}"`)
+    ];
+    const googleIdentityTerms = compactTerms([
+      ...tickerAliases.slice(0, 4).map((value) => `"${value}"`),
+      ...companyAliases.slice(0, 4).map((value) => `"${value}"`)
+    ]);
+    const query = `(${aliasTerms.join(" OR ")}) (stock OR shares OR earnings OR revenue OR guidance OR merger OR acquisition OR analyst OR company OR financing OR project OR contract)`;
+    const googleQuery =
+      googleIdentityTerms.length > 1
+        ? `(${googleIdentityTerms.join(" OR ")})`
+        : googleIdentityTerms[0] || `"${requestedTicker}"`;
     return {
       mode,
       source,
@@ -481,12 +513,14 @@ async function buildNewsRequest(queryParams) {
       timespan,
       trackHistory,
       filters,
-      label: company ? `${resolved.symbol} - ${company}` : resolved.symbol,
-      ticker: resolved.symbol,
-      tickerSymbol: resolved.symbol,
+      label: company ? `${requestedTicker} - ${company}` : requestedTicker,
+      ticker: requestedTicker,
+      tickerSymbol,
+      tickerAliases,
       company,
+      companyAliases,
       query,
-      googleQuery: company ? `${resolved.symbol} ${company} stock` : `${resolved.symbol} stock`
+      googleQuery
     };
   }
 
@@ -830,11 +864,11 @@ function getRssFeedsForRequest(request, sourceMode) {
   add("stocktitan", "Stock Titan", "https://www.stocktitan.net/rss", "BUSINESS");
 
   add("yahoo", "Yahoo Finance", "https://finance.yahoo.com/rss/topstories", "BUSINESS");
-  if (request.tickerSymbol) {
+  for (const symbol of getTickerSymbolAliases(request).slice(0, 4)) {
     add(
       "yahoo",
       "Yahoo Finance",
-      `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(request.tickerSymbol)}&region=US&lang=en-US`,
+      `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(symbol)}&region=US&lang=en-US`,
       "BUSINESS"
     );
   }
@@ -947,8 +981,11 @@ function getEffectiveFocus(request) {
 function getRequestTerms(request) {
   if (request.mode === "ticker") {
     return compactTerms([
+      request.ticker,
       request.tickerSymbol,
+      ...(request.tickerAliases || []),
       request.company,
+      ...(request.companyAliases || []),
       ...String(request.company || "").split(/[^a-z0-9.]+/i)
     ]);
   }
@@ -1549,31 +1586,26 @@ function articleHasCustomMatch(article, request) {
 function tickerMentionStrength(article, request) {
   const title = String(article.title || "").toLowerCase();
   const text = getArticleSearchText(article, { includeUrl: true });
-  const symbol = String(request.tickerSymbol || "").toUpperCase();
-  const symbolLower = symbol.toLowerCase();
-  const company = cleanText(request.company || "").toLowerCase();
-  const companyTokens = getCompanyIdentityTerms(request.company || "");
+  const symbolAliases = getTickerSymbolAliases(request);
+  const companyAliases = getTickerCompanyAliases(request);
+  const companyTokens = getTickerCompanyBrandTerms(request);
   let score = 0;
 
-  if (symbol) {
-    if (matchesTickerSymbol(title, symbol)) score += 12;
-    else if (matchesTickerSymbol(text, symbol)) score += 8;
-    if (title.includes(`$${symbolLower}`) || text.includes(`$${symbolLower}`)) score += 2;
-  }
+  if (symbolAliases.some((symbol) => matchesTickerSymbol(title, symbol))) score += 12;
+  else if (symbolAliases.some((symbol) => matchesTickerSymbol(text, symbol))) score += 8;
+  if (symbolAliases.some((symbol) => title.includes(`$${symbol.toLowerCase()}`) || text.includes(`$${symbol.toLowerCase()}`))) score += 2;
 
-  if (company && company !== symbolLower) {
-    if (matchesNewsTerm(title, company)) score += 10;
-    else if (matchesNewsTerm(text, company)) score += 6;
-  }
+  if (companyAliases.some((company) => matchesNewsTerm(title, company))) score += 10;
+  else if (companyAliases.some((company) => matchesNewsTerm(text, company))) score += 6;
 
   const titleTokenHits = countDistinctTermMatches(title, companyTokens);
   const textTokenHits = countDistinctTermMatches(text, companyTokens);
 
   if (titleTokenHits >= 2) score += 7;
-  else if (titleTokenHits === 1 && companyTokens.length === 1) score += 3;
+  else if (titleTokenHits === 1 && hasHighConfidenceTickerBrand(companyTokens)) score += 5;
 
   if (textTokenHits >= 2) score += 4;
-  else if (textTokenHits === 1 && companyTokens.length === 1) score += 1;
+  else if (textTokenHits === 1 && hasHighConfidenceTickerBrand(companyTokens)) score += 2;
 
   if (isTickerNoiseArticle(article, request)) score -= 8;
 
@@ -1583,24 +1615,26 @@ function tickerMentionStrength(article, request) {
 function articleHasTickerAnchor(article, request) {
   const title = String(article.title || "").toLowerCase();
   const text = getArticleSearchText(article, { includeUrl: true });
-  const symbol = String(request.tickerSymbol || "").toUpperCase();
-  const company = cleanText(request.company || "").toLowerCase();
-  const companyTokens = getCompanyIdentityTerms(request.company || "");
+  const symbolAliases = getTickerSymbolAliases(request);
+  const companyAliases = getTickerCompanyAliases(request);
+  const companyTokens = getTickerCompanyBrandTerms(request);
 
-  if (symbol && (matchesTickerSymbol(title, symbol) || matchesTickerSymbol(text, symbol))) return true;
-  if (company && (matchesNewsTerm(title, company) || matchesNewsTerm(text, company))) return true;
+  if (symbolAliases.some((symbol) => matchesTickerSymbol(title, symbol) || matchesTickerSymbol(text, symbol))) return true;
+  if (companyAliases.some((company) => matchesNewsTerm(title, company) || matchesNewsTerm(text, company))) return true;
+  if (countDistinctTermMatches(title, companyTokens) >= 1 && hasHighConfidenceTickerBrand(companyTokens)) return true;
   if (companyTokens.length >= 2 && countDistinctTermMatches(text, companyTokens) >= 2) return true;
   return false;
 }
 
 function articleHasTickerTitleAnchor(article, request) {
   const title = String(article.title || "").toLowerCase();
-  const symbol = String(request.tickerSymbol || "").toUpperCase();
-  const company = cleanText(request.company || "").toLowerCase();
-  const companyTokens = getCompanyIdentityTerms(request.company || "");
+  const symbolAliases = getTickerSymbolAliases(request);
+  const companyAliases = getTickerCompanyAliases(request);
+  const companyTokens = getTickerCompanyBrandTerms(request);
 
-  if (symbol && matchesTickerSymbol(title, symbol)) return true;
-  if (company && matchesNewsTerm(title, company)) return true;
+  if (symbolAliases.some((symbol) => matchesTickerSymbol(title, symbol))) return true;
+  if (companyAliases.some((company) => matchesNewsTerm(title, company))) return true;
+  if (countDistinctTermMatches(title, companyTokens) >= 1 && hasHighConfidenceTickerBrand(companyTokens)) return true;
   if (companyTokens.length >= 2 && countDistinctTermMatches(title, companyTokens) >= 2) return true;
   return false;
 }
@@ -1794,6 +1828,27 @@ function getCompanyIdentityTerms(company) {
       .map((term) => term.toLowerCase())
       .filter((term) => term.length > 2 && !companyNoiseWords.has(term))
   );
+}
+
+function getTickerSymbolAliases(request) {
+  return compactTerms([request.ticker, request.tickerSymbol, ...(request.tickerAliases || [])])
+    .map((value) => sanitizeTicker(value))
+    .filter(Boolean);
+}
+
+function getTickerCompanyAliases(request) {
+  return compactTerms([request.company, ...(request.companyAliases || [])]).map((value) => cleanText(value).toLowerCase()).filter(Boolean);
+}
+
+function getTickerCompanyBrandTerms(request) {
+  return compactTerms(getTickerCompanyAliases(request)
+    .flatMap((value) => String(value || "").split(/[^a-z0-9]+/i)))
+    .map((term) => term.toLowerCase())
+    .filter((term) => term.length > 3 && !tickerBrandNoiseWords.has(term));
+}
+
+function hasHighConfidenceTickerBrand(terms) {
+  return (terms || []).some((term) => String(term || "").length >= 6);
 }
 
 function countDistinctTermMatches(value, terms) {
@@ -2116,14 +2171,27 @@ async function resolveTicker(rawTicker) {
     const quotes = Array.isArray(json.quotes) ? json.quotes : [];
     const exact = quotes.find((quote) => String(quote.symbol || "").toUpperCase() === symbol);
     const quote = exact || quotes[0] || {};
-    const value = {
+    const aliases = compactTerms([
       symbol,
-      name: cleanText(quote.longname || quote.shortname || symbol)
+      quote.symbol,
+      ...quotes.slice(0, 5).map((item) => item.symbol)
+    ]).map((value) => sanitizeTicker(value)).filter(Boolean);
+    const companyAliases = compactTerms([
+      quote.longname,
+      quote.shortname,
+      quote.prevName,
+      ...quotes.slice(0, 5).flatMap((item) => [item.longname, item.shortname, item.prevName])
+    ]);
+    const value = {
+      symbol: sanitizeTicker(quote.symbol || symbol),
+      name: cleanText(quote.longname || quote.shortname || symbol),
+      aliases,
+      companyAliases
     };
     tickerCache.set(symbol, { createdAt: Date.now(), value });
     return value;
   } catch {
-    const value = { symbol, name: symbol };
+    const value = { symbol, name: symbol, aliases: [symbol], companyAliases: [symbol] };
     tickerCache.set(symbol, { createdAt: Date.now(), value });
     return value;
   }
