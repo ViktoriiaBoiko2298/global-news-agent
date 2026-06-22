@@ -822,7 +822,7 @@ function localizedMap(group) {
 
 function renderPresetOptions() {
   const selectedSource = elements.sourceSelect.value || "google";
-  const selectedCategory = elements.worldCategorySelect.value || "";
+  const selectedCategory = elements.worldCategorySelect.value || "all";
   const selectedCommodity = elements.commoditySelect.value || "gold";
   const selectedFocus = elements.focusSelect.value || "all";
   const selectedFilterLanguage = elements.languageSelect.value || "any";
@@ -847,7 +847,7 @@ function renderPresetOptions() {
   fillSelect(elements.refreshInterval, localizedRefreshIntervals());
 
   elements.sourceSelect.value = localizedMap("sources")[selectedSource] ? selectedSource : "google";
-  elements.worldCategorySelect.value = selectedCategory;
+  elements.worldCategorySelect.value = localizedMap("worldCategories")[selectedCategory] ? selectedCategory : "all";
   elements.commoditySelect.value = selectedCommodity;
   elements.focusSelect.value = selectedFocus;
   elements.languageSelect.value = selectedFilterLanguage;
@@ -975,7 +975,7 @@ function hydrateFromUrl() {
   state.mode = params.get("mode") || "world";
   elements.sourceSelect.value = params.get("source") || "google";
   elements.timespanSelect.value = params.get("timespan") || "24h";
-  elements.worldCategorySelect.value = params.get("category") || "";
+  elements.worldCategorySelect.value = params.get("category") || "all";
   elements.tickerInput.value = params.get("ticker") || "";
   elements.commoditySelect.value = params.get("commodity") || "gold";
   elements.queryInput.value = params.get("query") || "";
