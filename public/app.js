@@ -1488,6 +1488,7 @@ function localizedRequestLabel(request, locale = state.locale) {
 function buildLocalizedBriefing(data, request, clusters) {
   const ui = currentUi();
   const total = data.stats?.total || countClusterArticles(clusters);
+  if (!total && !clusters.length) return [];
   const topTags = (data.stats?.topTags || []).slice(0, 3).map((entry) => translateTag(entry.label)).join(", ");
   const leadCluster = clusters[0];
   const label = localizedRequestLabel(request);

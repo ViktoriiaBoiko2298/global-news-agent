@@ -352,14 +352,14 @@ app.get("/api/news", async (req, res) => {
 
     if (cached && Date.now() - cached.createdAt < CACHE_TTL_MS) {
       const payload = { ...cached.payload, cached: true };
-      if (request.trackHistory) await recordSearchHistory(payload.request);
+      if (request.trackHistory) await recordSearchHistorySafely(payload.request);
       res.json(payload);
       return;
     }
 
     const payload = await fetchNews(request);
     cache.set(cacheKey, { createdAt: Date.now(), payload });
-    if (request.trackHistory) await recordSearchHistory(payload.request);
+    if (request.trackHistory) await recordSearchHistorySafely(payload.request);
     res.json({ ...payload, cached: false });
   } catch (error) {
     res.status(400).json({
@@ -499,7 +499,7 @@ async function buildNewsRequest(queryParams) {
     const tickerSymbol = sanitizeTicker(resolved.symbol || requestedTicker);
     const company = cleanText(resolved.name || "");
     const tickerAliases = compactTerms([requestedTicker, tickerSymbol, ...(resolved.aliases || [])]).map((value) => sanitizeTicker(value)).filter(Boolean);
-    const companyAliases = compactTerms([company, ...(resolved.companyAliases || [])]);
+    const companyAliases = expandCompanyAliases(company, ...(resolved.companyAliases || []));
     const aliasTerms = [
       ...tickerAliases.map((value) => `"${value}"`),
       ...tickerAliases.map((value) => `"$${value}"`),
@@ -602,7 +602,7 @@ async function fetchNews(request) {
   const processed = (await filterUnavailableArticles(candidatePool)).slice(0, request.limit);
   if (!processed.length) {
     if (successfulProviders > 0) {
-      throw new Error("Новости отсутствуют.");
+      return buildEmptyNewsPayload(request);
     }
     if (errors.length && errors.every(isProviderUnavailableError)) {
       throw new Error("Источники временно недоступны. Попробуйте позже.");
@@ -1838,6 +1838,26 @@ function getCompanyIdentityTerms(company) {
   );
 }
 
+function expandCompanyAliases(...values) {
+  const legalSuffixPattern =
+    /\b(?:incorporated|inc|corp|corporation|company|co|limited|ltd|plc|llc|lp|holdings?|group|sa|ag|nv)\b\.?/gi;
+  const variants = [];
+
+  for (const value of values) {
+    const raw = cleanText(value);
+    if (!raw) continue;
+    variants.push(raw);
+
+    const stripped = cleanText(raw.replace(legalSuffixPattern, " "));
+    if (stripped && stripped !== raw) variants.push(stripped);
+
+    const normalized = cleanText(stripped.replace(/[.,]/g, " "));
+    if (normalized && normalized !== stripped) variants.push(normalized);
+  }
+
+  return compactTerms(variants);
+}
+
 function getTickerSymbolAliases(request) {
   return compactTerms([request.ticker, request.tickerSymbol, ...(request.tickerAliases || [])])
     .map((value) => sanitizeTicker(value))
@@ -1871,7 +1891,7 @@ function matchesTickerSymbol(value, symbol) {
 
 function minTickerMentionStrength(request) {
   const matchMode = request.filters?.matchMode || "balanced";
-  const thresholds = { strict: 12, balanced: 10, broad: 10 };
+  const thresholds = { strict: 10, balanced: 7, broad: 5 };
   return thresholds[matchMode] ?? thresholds.balanced;
 }
 
@@ -2122,6 +2142,18 @@ function buildBriefing(articles, clusters, request) {
   };
 }
 
+function buildEmptyNewsPayload(request) {
+  return {
+    request: buildRequestInfo(request, request.source || "google"),
+    articles: [],
+    clusters: [],
+    stats: buildStats([]),
+    summary: { mode: "heuristic", lines: [] },
+    briefing: { mode: "heuristic", lines: [] },
+    generatedAt: new Date().toISOString()
+  };
+}
+
 function buildRequestInfo(request, source) {
   return {
     mode: request.mode,
@@ -2134,7 +2166,7 @@ function buildRequestInfo(request, source) {
     parsedQuery: request.parsedQuery || null,
     commodity: request.commodity || "",
     query: request.query || "",
-    ticker: request.tickerSymbol || ""
+    ticker: request.ticker || request.tickerSymbol || ""
   };
 }
 
@@ -2187,14 +2219,14 @@ async function resolveTicker(rawTicker) {
       ...(override?.aliases || []),
       ...quotes.slice(0, 5).map((item) => item.symbol)
     ]).map((value) => sanitizeTicker(value)).filter(Boolean);
-    const companyAliases = compactTerms([
+    const companyAliases = expandCompanyAliases(
       override?.name,
       ...(override?.companyAliases || []),
       quote.longname,
       quote.shortname,
       quote.prevName,
       ...quotes.slice(0, 5).flatMap((item) => [item.longname, item.shortname, item.prevName])
-    ]);
+    );
     const value = {
       symbol: sanitizeTicker(quote.symbol || override?.symbol || symbol),
       name: cleanText(quote.longname || quote.shortname || override?.name || ""),
@@ -2214,7 +2246,7 @@ async function resolveTicker(rawTicker) {
       symbol: sanitizeTicker(override?.symbol || symbol),
       name: cleanText(override?.name || ""),
       aliases: fallbackAliases.length ? fallbackAliases : [symbol],
-      companyAliases: compactTerms([override?.name, ...(override?.companyAliases || [])])
+      companyAliases: expandCompanyAliases(override?.name, ...(override?.companyAliases || []))
     };
     tickerCache.set(symbol, { createdAt: Date.now(), value });
     return value;
@@ -2528,6 +2560,14 @@ async function recordSearchHistory(requestInfo) {
   };
   const withoutSame = history.filter((item) => item.signature !== signature);
   await writeSearchHistory([nextItem, ...withoutSame].slice(0, 25));
+}
+
+async function recordSearchHistorySafely(requestInfo) {
+  try {
+    await recordSearchHistory(requestInfo);
+  } catch (error) {
+    console.warn("Failed to record search history.", error);
+  }
 }
 
 function normalizeWatchItem(body, options = {}) {
