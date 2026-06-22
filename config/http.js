@@ -4,10 +4,7 @@ import express from "express";
 import helmet from "helmet";
 import path from "path";
 
-const IMMUTABLE_ASSET_EXTENSIONS = new Set([
-  ".css",
-  ".js",
-  ".mjs",
+const LONG_CACHE_ASSET_EXTENSIONS = new Set([
   ".png",
   ".jpg",
   ".jpeg",
@@ -20,13 +17,28 @@ const IMMUTABLE_ASSET_EXTENSIONS = new Set([
   ".woff2"
 ]);
 
+const REVALIDATED_ASSET_EXTENSIONS = new Set([
+  ".css",
+  ".js",
+  ".mjs",
+  ".webmanifest"
+]);
+
 export function applyHttpDefaults(app, { publicDir, rootDir }) {
   const staticMiddleware = express.static(publicDir, {
     etag: true,
     index: false,
     maxAge: "1h",
     setHeaders(res, filePath) {
-      if (IMMUTABLE_ASSET_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+      const extension = path.extname(filePath).toLowerCase();
+      const fileName = path.basename(filePath).toLowerCase();
+
+      if (fileName === "sw.js" || REVALIDATED_ASSET_EXTENSIONS.has(extension)) {
+        res.setHeader("Cache-Control", "no-cache");
+        return;
+      }
+
+      if (LONG_CACHE_ASSET_EXTENSIONS.has(extension)) {
         res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
       }
     }
@@ -66,7 +78,7 @@ export function applyHttpDefaults(app, { publicDir, rootDir }) {
   app.use(express.json({ limit: "256kb" }));
 
   app.get("/vendor/lucide.min.js", (_req, res) => {
-    res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(rootDir, "node_modules", "lucide", "dist", "umd", "lucide.min.js"));
   });
 
