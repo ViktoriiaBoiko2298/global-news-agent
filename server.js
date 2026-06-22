@@ -66,6 +66,9 @@ const REQUEST_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 const EMPTY_IMAGE_CACHE_TTL_MS = 15 * 60 * 1000;
 const INDEX_TEMPLATE_FILE = path.join(PUBLIC_DIR, "index.html");
+const APP_SCRIPT_FILE = path.join(PUBLIC_DIR, "app.js");
+const STYLES_FILE = path.join(PUBLIC_DIR, "styles.css");
+const LUCIDE_FILE = path.join(__dirname, "node_modules", "lucide", "dist", "umd", "lucide.min.js");
 const DEFAULT_SOCIAL_IMAGE_PATH = "/mockups/concept-4-visual-story-stream.png";
 const tickerOverrides = {
   NRED: {
@@ -2470,6 +2473,11 @@ async function renderIndexDocument(req, res) {
   const origin = getPublicOrigin(req);
   const canonicalUrl = getCanonicalUrl(req, origin);
   const socialImageUrl = new URL(DEFAULT_SOCIAL_IMAGE_PATH, `${origin}/`).toString();
+  const [stylesUrl, appJsUrl, lucideUrl] = await Promise.all([
+    getVersionedAssetUrl(STYLES_FILE, "/styles.css"),
+    getVersionedAssetUrl(APP_SCRIPT_FILE, "/app.js"),
+    getVersionedAssetUrl(LUCIDE_FILE, "/vendor/lucide.min.js")
+  ]);
   const jsonLd = serializeJsonForHtml({
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -2483,6 +2491,9 @@ async function renderIndexDocument(req, res) {
   return (await loadIndexTemplate())
     .replaceAll("__CANONICAL_URL__", escapeHtmlAttribute(canonicalUrl))
     .replaceAll("__OG_IMAGE_URL__", escapeHtmlAttribute(socialImageUrl))
+    .replaceAll("__STYLES_URL__", escapeHtmlAttribute(stylesUrl))
+    .replaceAll("__APP_JS_URL__", escapeHtmlAttribute(appJsUrl))
+    .replaceAll("__LUCIDE_URL__", escapeHtmlAttribute(lucideUrl))
     .replaceAll("__CSP_NONCE__", escapeHtmlAttribute(res.locals.cspNonce || ""))
     .replace("__WEBAPP_JSON_LD__", jsonLd);
 }
@@ -2509,6 +2520,15 @@ function getPublicOrigin(req) {
 function getCanonicalUrl(req, origin) {
   const pathname = req.path === "/index.html" ? "/" : req.path;
   return new URL(pathname || "/", `${origin}/`).toString();
+}
+
+async function getVersionedAssetUrl(filePath, publicPath) {
+  try {
+    const stats = await fs.stat(filePath);
+    return `${publicPath}?v=${stats.mtimeMs.toFixed(0)}`;
+  } catch {
+    return publicPath;
+  }
 }
 
 function normalizePublicBaseUrl(value) {
