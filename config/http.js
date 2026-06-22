@@ -28,7 +28,7 @@ export function applyHttpDefaults(app, { publicDir, rootDir }) {
   const staticMiddleware = express.static(publicDir, {
     etag: true,
     index: false,
-    maxAge: "1h",
+    maxAge: 0,
     setHeaders(res, filePath) {
       const extension = path.extname(filePath).toLowerCase();
       const fileName = path.basename(filePath).toLowerCase();
